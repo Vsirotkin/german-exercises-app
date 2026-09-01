@@ -1,0 +1,15 @@
+[project]
+name = "backend-django"
+version = "0.1.0"
+description = "German Exercises Backend on Django"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.2.11",
+    "djangorestframework>=3.15.0",
+    "djangorestframework-simplejwt>=5.3.0",
+    "django-cors-headers>=4.3.0",
+    "python-dotenv>=1.0.0",
+    "psycopg[binary]>=3.1.0",
+    "django-jazzmin>=3.0.3",
+    "requests>=2.32.5",
+]

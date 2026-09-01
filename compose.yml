@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: german_db
+    environment:
+      POSTGRES_DB: german_db
+      POSTGRES_USER: german_user
+      POSTGRES_PASSWORD: german_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U german_user -d german_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: german_backend
+    # Строка user удалена, так как Dockerfile уже задает UID 1000
+    environment:
+      POSTGRES_DB: german_db
+      POSTGRES_USER: german_user
+      POSTGRES_PASSWORD: german_password
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DJANGO_SECRET_KEY: "dev-secret-key-change-in-production"
+      DEBUG: "True"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "uv run python manage.py migrate && uv run python manage.py seed_data && uv run python manage.py runserver 0.0.0.0:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: german_frontend
+    # Строка user удалена
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Важно: защищает node_modules от перезаписи хостом
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

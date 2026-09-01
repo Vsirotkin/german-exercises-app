@@ -1,0 +1,37 @@
+# ==========================================
+# STAGE 1: Build (Сборка статики Vue3/Vite)
+# ==========================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Обновляем системные пакеты для безопасности этапа сборки
+RUN apk update && apk upgrade --no-cache
+
+# Копируем зависимости и устанавливаем их (npm ci быстрее и надежнее для CI)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Копируем исходники и собираем приложение (создается папка dist)
+COPY . .
+RUN npm run build
+
+# ==========================================
+# STAGE 2: Production (Раздача статики через Nginx)
+# ==========================================
+FROM nginx:alpine AS production
+
+# Обновляем системные пакеты Nginx
+RUN apk update && apk upgrade --no-cache
+
+# Удаляем дефолтную страницу Nginx
+RUN rm -rf /usr/share/nginx/html/*
+
+# Копируем ТОЛЬКО собранные файлы из Stage 1
+# В финальном образе НЕТ ни node_modules, ни npm, ни esbuild!
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+# Запускаем Nginx в foreground режиме
+CMD ["nginx", "-g", "daemon off;"]
