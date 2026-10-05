@@ -35,7 +35,7 @@ class ExerciseImportView(APIView):
     """
     POST /admin/exercises/import/
     Принимает JSON структуру (как в примере migration_summary) и создает упражнение.
-    Требует аутентификации.
+    Требует аутентификацию.
     """
 
     permission_classes = [IsAuthenticated]
@@ -137,10 +137,12 @@ class StudentProgressView(APIView):
                 "last_activity": None,
             })
 
-        # 👇 Получаем все результаты студента
+        # Получаем результаты студента.
+        # total_questions > 0 исключает результаты, для которых невозможно
+        # корректно рассчитать процент.
         results = ExerciseResult.objects.filter(
-            student=student, 
-            total_questions__gt=0  # Исключаем деление на ноль
+            student=student,
+            total_questions__gt=0
         )
 
         if not results.exists():
@@ -151,21 +153,33 @@ class StudentProgressView(APIView):
                 "last_activity": None,
             })
 
-        # 👇 Рассчитываем проценты для каждого результата
-        percentages = [
-            (r.score / r.total_questions) * 100 
-            for r in results
-        ]
+        # Агрегируем данные непосредственно на уровне базы данных.
+        # Процент каждого результата = score / total_questions * 100.
+        # Django ORM переводит эти выражения в SQL.
+        from django.db.models import F, FloatField, ExpressionWrapper
 
-        # 👇 Считаем среднее и максимум из процентов
-        average_score = sum(percentages) / len(percentages)
-        best_score = max(percentages)
+        statistics = results.aggregate(
+            average_score=Avg(
+                ExpressionWrapper(
+                    F("score") * 100.0 / F("total_questions"),
+                    output_field=FloatField(),
+                )
+            ),
+            best_score=Max(
+                ExpressionWrapper(
+                    F("score") * 100.0 / F("total_questions"),
+                    output_field=FloatField(),
+                )
+            ),
+        )
+
+        last_result = results.order_by("-completed_at").first()
 
         return Response({
             "total_exercises": results.count(),
-            "average_score": round(average_score, 1),  # 👈 Округляем до 1 знака
-            "best_score": round(best_score, 1),
-            "last_activity": results.order_by('-completed_at').first().completed_at,
+            "average_score": round(statistics["average_score"], 1),
+            "best_score": round(statistics["best_score"], 1),
+            "last_activity": last_result.completed_at,
         })
 
 
@@ -219,9 +233,9 @@ class ExerciseResultView(APIView):
             data=request.data,
             context={'request': request}
         )
-        
+
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
