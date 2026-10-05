@@ -6,7 +6,7 @@ WORKDIR /app
 RUN apk update && apk upgrade --no-cache
 
 # Обновляем npm до последней версии для закрытия CVE в его зависимостях
-RUN npm install -g npm@latest
+RUN npm install -g npm@11
 
 # Копируем файлы зависимостей
 COPY package.json package-lock.json ./

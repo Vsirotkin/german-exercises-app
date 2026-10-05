@@ -1,28 +1,94 @@
 // src/utils/api.js
 import axios from 'axios'
 
+const TOKEN_KEY = 'authToken'
+const REFRESH_KEY = 'refreshToken'
+
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   headers: { 'Content-Type': 'application/json' },
 })
 
+// ---- refresh-очередь ----
+let isRefreshing = false
+let pendingRequests = [] // [{ resolve, reject, config }]
+
+const onRefreshed = (token) => {
+  pendingRequests.forEach(({ resolve, config }) => {
+    config.headers.Authorization = `Bearer ${token}`
+    resolve(apiClient(config))
+  })
+  pendingRequests = []
+}
+
+const onRefreshFailed = (error) => {
+  pendingRequests.forEach(({ reject }) => reject(error))
+  pendingRequests = []
+}
+
+// ---- request interceptor ----
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('authToken')
+    const token = localStorage.getItem(TOKEN_KEY)
     if (token) config.headers.Authorization = `Bearer ${token}`
     return config
   },
   (error) => Promise.reject(error),
 )
 
+// ---- response interceptor ----
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      console.warn('⚠️ Session expired (401)')
-      // Здесь можно добавить авто-разлогин
+  async (error) => {
+    const original = error.config
+    const status = error.response?.status
+
+    // не 401 / нет конфига / уже пытались ретраить — просто пробрасываем
+    if (status !== 401 || !original || original._retry) {
+      return Promise.reject(error)
     }
-    return Promise.reject(error)
+
+    // сам запрос на refresh или логин не ретраим — иначе рекурсия
+    const url = original.url || ''
+    if (url.includes('/auth/token/refresh/') || url.includes('/auth/login/')) {
+      return Promise.reject(error)
+    }
+
+    const refresh = localStorage.getItem(REFRESH_KEY)
+    if (!refresh) {
+      // refresh-токена нет — сразу разлогин
+      localStorage.removeItem(TOKEN_KEY)
+      window.dispatchEvent(new Event('auth:logout'))
+      return Promise.reject(error)
+    }
+
+    original._retry = true
+
+    // если refresh уже идёт — встаём в очередь
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        pendingRequests.push({ resolve, reject, config: original })
+      })
+    }
+
+    isRefreshing = true
+
+    try {
+      const res = await axios.post(`${apiClient.defaults.baseURL}/auth/token/refresh/`, { refresh })
+      const newAccess = res.data.access
+      localStorage.setItem(TOKEN_KEY, newAccess)
+
+      onRefreshed(newAccess)
+      return apiClient(original)
+    } catch (refreshError) {
+      onRefreshFailed(refreshError)
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(REFRESH_KEY)
+      window.dispatchEvent(new Event('auth:logout'))
+      return Promise.reject(refreshError)
+    } finally {
+      isRefreshing = false
+    }
   },
 )
 
@@ -37,12 +103,11 @@ export const api = {
     return res.data
   },
 
-  async refreshToken(refreshToken) {
-    const res = await apiClient.post('/auth/token/refresh/', { refresh: refreshToken })
+  async refreshToken(token) {
+    const res = await apiClient.post('/auth/token/refresh/', { refresh: token })
     return res.data
   },
 
-  // ✅ НОВЫЙ МЕТОД: Получение списка всех упражнений
   async getExercisesList() {
     const res = await apiClient.get('/exercises/')
     return res.data
@@ -64,8 +129,6 @@ export const api = {
     const res = await apiClient.post('/results/', resultData)
     return res.data
   },
-
-  // src/utils/api.js
 
   async getStudentProgress(studentId) {
     const res = await apiClient.get(`/results/student/${studentId}/progress/`)

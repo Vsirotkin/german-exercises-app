@@ -1,17 +1,19 @@
-// vite.config.js
 import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [vue(), vueDevTools()],
+  plugins: [vue(), vueDevTools(), tailwindcss()],
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+
   server: {
     proxy: {
       '/admin': {
@@ -27,7 +29,6 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/exercises': {
-        // ← ДОБАВЛЕНО
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
@@ -36,7 +37,6 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/results': {
-        // ← РЕКОМЕНДУЕТСЯ ДОБАВИТЬ (если ещё нет)
         target: 'http://localhost:8000',
         changeOrigin: true,
       },

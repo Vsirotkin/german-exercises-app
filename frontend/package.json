@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0.2",
     "@vue/eslint-config-prettier": "^10.2.0",
     "@vue/test-utils": "^2.4.11",
@@ -32,6 +33,7 @@
     "globals": "^16.5.0",
     "jsdom": "^29.1.1",
     "prettier": "3.6.2",
+    "tailwindcss": "^4.3.3",
     "vite": "^7.2.4",
     "vite-plugin-vue-devtools": "^8.0.5",
     "vitest": "^4.1.11"
