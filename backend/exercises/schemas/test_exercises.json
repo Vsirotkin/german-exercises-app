@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "language": "german",
+  "exercises": [
+    {
+      "title": "Alltag – Wörter",
+      "type": "vocabulary_drill",
+      "level": "A1",
+      "topics": ["Alltag"],
+      "active": true,
+      "order": 1,
+      "data": {
+        "items": [
+          {
+            "word": "das Haus",
+            "correct": "дом",
+            "distractors": ["машина", "школа", "магазин"]
+          },
+          {
+            "word": "der Tisch",
+            "correct": "стол",
+            "distractors": ["стул", "окно", "дверь"]
+          },
+          {
+            "word": "die Tür",
+            "correct": "дверь",
+            "distractors": ["стена", "крыша", "пол"]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Sein oder haben?",
+      "type": "multiple_choice",
+      "level": "A1",
+      "topics": ["Grammatik"],
+      "active": true,
+      "order": 2,
+      "data": {
+        "items": [
+          {
+            "question": "Ich ___ Student.",
+            "selection_mode": "single",
+            "options": [
+              {
+                "text": "bin",
+                "correct": true
+              },
+              {
+                "text": "habe",
+                "correct": false
+              },
+              {
+                "text": "bist",
+                "correct": false
+              },
+              {
+                "text": "sind",
+                "correct": false
+              }
+            ]
+          },
+          {
+            "question": "Wir ___ ein Auto.",
+            "selection_mode": "single",
+            "options": [
+              {
+                "text": "haben",
+                "correct": true
+              },
+              {
+                "text": "sind",
+                "correct": false
+              },
+              {
+                "text": "hat",
+                "correct": false
+              },
+              {
+                "text": "bist",
+                "correct": false
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Im Café",
+      "type": "dropdown",
+      "level": "A1",
+      "topics": ["Essen und Trinken"],
+      "active": true,
+      "order": 3,
+      "data": {
+        "items": [
+          {
+            "parts": [
+              {
+                "type": "text",
+                "text": "Ich möchte "
+              },
+              {
+                "type": "select",
+                "options": [
+                  {
+                    "text": "einen Kaffee",
+                    "correct": true
+                  },
+                  {
+                    "text": "eine Kaffee",
+                    "correct": false
+                  },
+                  {
+                    "text": "ein Kaffee",
+                    "correct": false
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": " und "
+              },
+              {
+                "type": "select",
+                "options": [
+                  {
+                    "text": "ein Wasser",
+                    "correct": true
+                  },
+                  {
+                    "text": "einen Wasser",
+                    "correct": false
+                  },
+                  {
+                    "text": "eine Wasser",
+                    "correct": false
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Lückentext – Präsens",
+      "type": "gap_fill",
+      "level": "A1",
+      "topics": ["Grammatik", "Präsens"],
+      "active": true,
+      "order": 4,
+      "data": {
+        "items": [
+          {
+            "text": "Ich {{gap1}} Deutsch.",
+            "gaps": [
+              {
+                "placeholder": "{{gap1}}",
+                "correct": "lerne"
+              }
+            ]
+          },
+          {
+            "text": "Wir {{gap1}} in Berlin.",
+            "gaps": [
+              {
+                "placeholder": "{{gap1}}",
+                "correct": "wohnen"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Satz bilden",
+      "type": "sentence_builder",
+      "level": "A1",
+      "topics": ["Satzbau"],
+      "active": true,
+      "order": 5,
+      "data": {
+        "items": [
+          {
+            "tokens": [
+              {
+                "text": "Ich",
+                "position": 0
+              },
+              {
+                "text": "lerne",
+                "position": 1
+              },
+              {
+                "text": "Deutsch",
+                "position": 2
+              },
+              {
+                "text": "heute",
+                "position": 3
+              }
+            ]
+          },
+          {
+            "tokens": [
+              {
+                "text": "Wir",
+                "position": 0
+              },
+              {
+                "text": "wohnen",
+                "position": 1
+              },
+              {
+                "text": "in",
+                "position": 2
+              },
+              {
+                "text": "Berlin",
+                "position": 3
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

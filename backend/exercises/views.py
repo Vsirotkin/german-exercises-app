@@ -1,202 +1,323 @@
-from rest_framework.views import APIView
-from rest_framework.generics import ListAPIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import User
-from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.db.models import Avg, Max
+from django.shortcuts import get_object_or_404
 
-from django.db.models import Avg, Max, Count
+from rest_framework import status
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import Exercise, Topic, VocabularyCard, Sentence, GapOption, ExerciseResult, Student
-from .serializers import ExerciseSerializer, ExerciseCreateSerializer, ExerciseResultSerializer
+from .models import (
+    Exercise,
+    ExerciseResult,
+    Student,
+    Topic,
+)
+from .serializers import (
+    ExerciseListSerializer,
+    ExerciseSerializer,
+    ExerciseCreateSerializer,
+    ExerciseResultSerializer,
+)
+
+# ============================================================
+# 1. Получение полного упражнения
+# ============================================================
 
 
-# --- 1. Получение полного упражнения ---
 class ExerciseDetailView(APIView):
     """
-    GET /exercises/{id}/full/
-    Возвращает полное упражнение со всеми вложенными данными (карточки или предложения).
-    Доступно всем (или только авторизованным, если нужно).
+    GET /api/exercises/<id>/full/
+
+    Возвращает полное упражнение в безопасном формате.
+
+    ВАЖНО:
+    Правильные ответы и другие данные, позволяющие определить
+    правильное решение, не должны попадать во frontend.
     """
 
-    permission_classes = [AllowAny]  # Пока откроем для всех, потом можно закрыть
+    permission_classes = [AllowAny]
 
     def get(self, request, pk):
-        exercise = get_object_or_404(Exercise, pk=pk, is_active=True)
-        # 👇 Передаём request в контекст для расчёта статуса студента
-        serializer = ExerciseSerializer(exercise, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        exercise = get_object_or_404(
+            Exercise.objects.prefetch_related("topics"),
+            pk=pk,
+            is_active=True,
+        )
+
+        serializer = ExerciseSerializer(
+            exercise,
+            context={"request": request},
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
 
 
-# --- 2. Импорт упражнений (Admin only) ---
+# ============================================================
+# 2. Импорт упражнения
+# ============================================================
+
+
 class ExerciseImportView(APIView):
     """
-    POST /admin/exercises/import/
-    Принимает JSON структуру (как в примере migration_summary) и создает упражнение.
-    Требует аутентификацию.
+    POST /api/admin/exercises/import/
+
+    Создание упражнения через API.
+
+    Полная структура создания будет определяться
+    новым ExerciseCreateSerializer.
     """
 
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def post(self, request):
-        serializer = ExerciseCreateSerializer(data=request.data)
+        serializer = ExerciseCreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
 
         if serializer.is_valid():
             exercise = serializer.save()
-            # Возвращаем созданное упражнение в том же формате
-            # 👇 Передаём request в контекст
-            response_serializer = ExerciseSerializer(exercise, context={'request': request})
-            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            response_serializer = ExerciseSerializer(
+                exercise,
+                context={"request": request},
+            )
+
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
-# --- 3. Рекомендации (Заглушка для примера) ---
+# ============================================================
+# 3. Рекомендации студента
+# ============================================================
+
+
 class StudentRecommendationsView(APIView):
     """
-    GET /recommendations/student/topics/
-    Возвращает темы для студента на основе прогресса.
+    GET /api/recommendations/student/topics/
+
+    Пока возвращает список доступных тем.
+
+    Алгоритм рекомендаций подключим позже на основе:
+    - StudentTopicProgress
+    - истории ExerciseResult
+    - mastery_level
+    - уровня студента
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Здесь будет логика выбора тем на основе StudentTopicProgress
-        # Пока вернем пустой список или все активные темы для теста
-        topics = Topic.objects.all()
-        data = [{"id": t.id, "name": t.name} for t in topics]
-        return Response({"recommendations": data}, status=status.HTTP_200_OK)
+        topics = Topic.objects.all().order_by("name")
+
+        data = [
+            {
+                "id": topic.id,
+                "name": topic.name,
+                "description": topic.description,
+            }
+            for topic in topics
+        ]
+
+        return Response(
+            {"recommendations": data},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ============================================================
+# 4. Текущий пользователь
+# ============================================================
 
 
 class CurrentUserView(APIView):
     """
     GET /api/me/
-    Возвращает профиль текущего пользователя на основе JWT токена.
+
+    Возвращает информацию о текущем пользователе.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
+
         return Response(
             {
                 "id": user.id,
                 "username": user.username,
-                "first_name": user.first_name
-                or user.username,  # Если имени нет, берем логин
+                "first_name": user.first_name or user.username,
                 "last_name": user.last_name,
                 "email": user.email,
-                "is_staff": user.is_staff,  # Это флаг админки Django
+                "is_staff": user.is_staff,
                 "is_superuser": user.is_superuser,
-                # Определяем роль для фронта: если staff или superuser -> admin, иначе student
-                "role": "admin" if (user.is_staff or user.is_superuser) else "student",
-            }
+                "role": ("admin" if user.is_staff or user.is_superuser else "student"),
+            },
+            status=status.HTTP_200_OK,
         )
+
+
+# ============================================================
+# 5. Список упражнений
+# ============================================================
 
 
 class ExerciseListView(ListAPIView):
     """
     GET /api/exercises/
-    Возвращает список всех активных упражнений (краткая информация).
+
+    Возвращает активные упражнения в кратком формате.
     """
 
     queryset = (
         Exercise.objects.filter(is_active=True)
         .prefetch_related("topics")
-        .order_by("order")  # 👇 Сортируем по порядку
+        .order_by("order")
     )
-    serializer_class = ExerciseSerializer
 
-    # 👇 Передаём request в контекст сериализатора
+    serializer_class = ExerciseListSerializer
+
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        context['request'] = self.request
+        context["request"] = self.request
         return context
+
+
+# ============================================================
+# 6. Вспомогательная функция поиска Student
+# ============================================================
+
+
+def get_student_for_user(user):
+    """
+    Возвращает Student, связанного с Django User.
+
+    Если профиль Student ещё не существует, возвращает None.
+
+    Мы сознательно не создаём Student автоматически здесь:
+    создание/синхронизация профиля будет отдельным процессом.
+    """
+
+    try:
+        return Student.objects.get(user=user)
+    except Student.DoesNotExist:
+        return None
+
+
+# ============================================================
+# 7. Прогресс студента
+# ============================================================
 
 
 class StudentProgressView(APIView):
     """
-    GET /api/results/student/<id>/progress/
-    Возвращает агрегированную статистику студента.
+    GET /api/results/student/<student_id>/progress/
+
+    В текущем frontend <student_id> фактически является user_id.
+    Сохраняем существующий URL-контракт, но работаем с новой моделью
+    ExerciseResult.
+
+    Возвращает:
+
+    {
+        "total_exercises": 10,
+        "average_score": 82.5,
+        "best_score": 100.0,
+        "last_activity": "..."
+    }
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, student_id):
-        # Конвертируем user_id → student_id
         try:
             student = Student.objects.get(user_id=student_id)
         except Student.DoesNotExist:
-            return Response({
-                "total_exercises": 0,
-                "average_score": 0,
-                "best_score": 0,
-                "last_activity": None,
-            })
+            return Response(
+                {
+                    "total_exercises": 0,
+                    "average_score": 0,
+                    "best_score": 0,
+                    "last_activity": None,
+                },
+                status=status.HTTP_200_OK,
+            )
 
-        # Получаем результаты студента.
-        # total_questions > 0 исключает результаты, для которых невозможно
-        # корректно рассчитать процент.
         results = ExerciseResult.objects.filter(
             student=student,
-            total_questions__gt=0
         )
 
         if not results.exists():
-            return Response({
-                "total_exercises": 0,
-                "average_score": 0,
-                "best_score": 0,
-                "last_activity": None,
-            })
-
-        # Агрегируем данные непосредственно на уровне базы данных.
-        # Процент каждого результата = score / total_questions * 100.
-        # Django ORM переводит эти выражения в SQL.
-        from django.db.models import F, FloatField, ExpressionWrapper
+            return Response(
+                {
+                    "total_exercises": 0,
+                    "average_score": 0,
+                    "best_score": 0,
+                    "last_activity": None,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         statistics = results.aggregate(
-            average_score=Avg(
-                ExpressionWrapper(
-                    F("score") * 100.0 / F("total_questions"),
-                    output_field=FloatField(),
-                )
-            ),
-            best_score=Max(
-                ExpressionWrapper(
-                    F("score") * 100.0 / F("total_questions"),
-                    output_field=FloatField(),
-                )
-            ),
+            average_score=Avg("percentage"),
+            best_score=Max("percentage"),
         )
 
         last_result = results.order_by("-completed_at").first()
 
-        return Response({
-            "total_exercises": results.count(),
-            "average_score": round(statistics["average_score"], 1),
-            "best_score": round(statistics["best_score"], 1),
-            "last_activity": last_result.completed_at,
-        })
+        return Response(
+            {
+                "total_exercises": results.count(),
+                "average_score": round(
+                    statistics["average_score"] or 0,
+                    1,
+                ),
+                "best_score": round(
+                    statistics["best_score"] or 0,
+                    1,
+                ),
+                "last_activity": last_result.completed_at,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+# ============================================================
+# 8. История студента
+# ============================================================
 
 
 class StudentHistoryView(APIView):
     """
-    GET /api/results/student/<id>/
-    Возвращает список последних результатов (история).
+    GET /api/results/student/<student_id>/
+
+    Возвращает последние результаты студента.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, student_id):
-        # Конвертируем user_id → student_id
         try:
             student = Student.objects.get(user_id=student_id)
         except Student.DoesNotExist:
-            return Response([])
+            return Response(
+                [],
+                status=status.HTTP_200_OK,
+            )
 
         results = (
             ExerciseResult.objects.filter(student=student)
@@ -205,37 +326,188 @@ class StudentHistoryView(APIView):
         )
 
         data = []
-        for res in results:
-            # Рассчитываем процент, если есть вопросы
-            score_percent = None
-            if res.total_questions and res.total_questions > 0:
-                score_percent = (res.score / res.total_questions) * 100
 
-            data.append({
-                "id": res.id,
-                "exercise": res.exercise.id if res.exercise else None,
-                "exercise_title": res.exercise.title if res.exercise else "Unknown",
-                "score": round(score_percent, 1) if score_percent is not None else None,  # ✅ Процент 0-100
-                "total_questions": res.total_questions,
-                "completed_at": res.completed_at,
-            })
+        for result in results:
+            data.append(
+                {
+                    "id": result.id,
+                    "exercise": (result.exercise.id if result.exercise else None),
+                    "exercise_title": (
+                        result.exercise.title if result.exercise else "Unknown"
+                    ),
+                    "score": result.score,
+                    "max_score": result.max_score,
+                    "percentage": result.percentage,
+                    "completed_at": result.completed_at,
+                }
+            )
 
-        return Response(data)
-
-
-# === 8. Сохранение результата упражнения ===
-class ExerciseResultView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        # Передаём request в контекст сериализатора
-        serializer = ExerciseResultSerializer(
-            data=request.data,
-            context={'request': request}
+        return Response(
+            data,
+            status=status.HTTP_200_OK,
         )
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+# ============================================================
+# 9. Проверка ответов
+# ============================================================
+
+
+def _evaluate_answers(exercise, answers):
+    """
+    Временная точка входа для evaluator.
+
+    Здесь пока НЕ реализуем сам алгоритм проверки.
+
+    Следующим шагом эта логика будет вынесена в отдельный модуль:
+
+        exercises/services/evaluator.py
+
+    и будет поддерживать:
+
+        vocabulary_drill
+        multiple_choice
+        dropdown
+        gap_fill
+        sentence_builder
+
+    Возвращаемый формат:
+
+    {
+        "score": 0.0,
+        "max_score": 0.0,
+        "percentage": 0.0,
+        "results": []
+    }
+
+    ВАЖНО:
+    canonical correct answers никогда не должны попадать
+    в сохранённый details.
+    """
+
+    raise NotImplementedError("Exercise evaluator is not implemented yet.")
+
+
+# ============================================================
+# 10. Сохранение результата упражнения
+# ============================================================
+
+
+class ExerciseResultView(APIView):
+    """
+    POST /api/results/
+
+    Принимает ответы пользователя:
+
+    {
+        "exercise_id": 1,
+        "answers": [
+            {
+                "item_id": 1,
+                "answer": "a"
+            }
+        ]
+    }
+
+    Backend самостоятельно проверяет ответы.
+
+    Frontend НЕ передаёт score/max_score/percentage.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+        exercise_id = request.data.get("exercise_id")
+        answers = request.data.get("answers")
+
+        if not exercise_id:
+            return Response(
+                {
+                    "error": {
+                        "code": "INVALID_EXERCISE_ID",
+                        "message": "exercise_id is required.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(answers, list):
+            return Response(
+                {
+                    "error": {
+                        "code": "INVALID_ANSWERS",
+                        "message": "answers must be an array.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        exercise = get_object_or_404(
+            Exercise,
+            pk=exercise_id,
+            is_active=True,
+        )
+
+        student = get_student_for_user(request.user)
+
+        if student is None:
+            return Response(
+                {
+                    "error": {
+                        "code": "STUDENT_PROFILE_NOT_FOUND",
+                        "message": (
+                            "Student profile was not found " "for the current user."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ----------------------------------------------------
+        # Evaluation
+        # ----------------------------------------------------
+
+        try:
+            evaluation = _evaluate_answers(
+                exercise=exercise,
+                answers=answers,
+            )
+
+        except NotImplementedError as exc:
+            return Response(
+                {
+                    "error": {
+                        "code": "EVALUATOR_NOT_IMPLEMENTED",
+                        "message": str(exc),
+                    }
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED,
+            )
+
+        # ----------------------------------------------------
+        # Save result
+        # ----------------------------------------------------
+
+        result = ExerciseResult.objects.create(
+            student=student,
+            exercise=exercise,
+            score=evaluation["score"],
+            max_score=evaluation["max_score"],
+            percentage=evaluation["percentage"],
+            details={
+                "answers": answers,
+                "results": evaluation.get("results", []),
+            },
+        )
+
+        return Response(
+            {
+                "exercise_id": exercise.id,
+                "score": result.score,
+                "max_score": result.max_score,
+                "percentage": result.percentage,
+                "results": evaluation.get("results", []),
+            },
+            status=status.HTTP_201_CREATED,
+        )

@@ -1,34 +1,57 @@
-# exercises/urls.py
-
 from django.urls import path
+
 from .views import (
+    CurrentUserView,
     ExerciseDetailView,
     ExerciseImportView,
-    StudentRecommendationsView,
-    CurrentUserView,
     ExerciseListView,
-    StudentProgressView,
-    StudentHistoryView,
     ExerciseResultView,
+    StudentHistoryView,
+    StudentProgressView,
+    StudentRecommendationsView,
 )
 
 urlpatterns = [
-    # Me
-    path("me/", CurrentUserView.as_view(), name="current-user"),
-    
+    # --------------------------------------------------------
+    # Current user
+    # --------------------------------------------------------
+    path(
+        "me/",
+        CurrentUserView.as_view(),
+        name="current-user",
+    ),
+    # --------------------------------------------------------
     # Exercises
-    path("exercises/", ExerciseListView.as_view(), name="exercise-list"),
-    path("exercises/<int:pk>/full/", ExerciseDetailView.as_view(), name="exercise-detail-full"),
-    
-    # Admin
-    path("admin/exercises/import/", ExerciseImportView.as_view(), name="exercise-import"),
-    
+    # --------------------------------------------------------
+    path(
+        "exercises/",
+        ExerciseListView.as_view(),
+        name="exercise-list",
+    ),
+    path(
+        "exercises/<int:pk>/full/",
+        ExerciseDetailView.as_view(),
+        name="exercise-detail-full",
+    ),
+    # --------------------------------------------------------
+    # Exercise import / administration
+    # --------------------------------------------------------
+    path(
+        "admin/exercises/import/",
+        ExerciseImportView.as_view(),
+        name="exercise-import",
+    ),
+    # --------------------------------------------------------
     # Recommendations
-    path("recommendations/student/topics/", StudentRecommendationsView.as_view(), name="student-recommendations"),
-    
-    # ✅ RESULTS (Исправленный порядок: специфичные → общие)
-    
-    # 1. Сначала специфичные маршруты с параметрами
+    # --------------------------------------------------------
+    path(
+        "recommendations/student/topics/",
+        StudentRecommendationsView.as_view(),
+        name="student-recommendations",
+    ),
+    # --------------------------------------------------------
+    # Student progress / history
+    # --------------------------------------------------------
     path(
         "results/student/<int:student_id>/progress/",
         StudentProgressView.as_view(),
@@ -39,8 +62,9 @@ urlpatterns = [
         StudentHistoryView.as_view(),
         name="student-history",
     ),
-    
-    # 2. Потом общий маршрут для создания (POST)
+    # --------------------------------------------------------
+    # Submit exercise result
+    # --------------------------------------------------------
     path(
         "results/",
         ExerciseResultView.as_view(),

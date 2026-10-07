@@ -1,13 +1,27 @@
 from django.db import models
-from django.contrib.auth.models import (
-    User,
-)  # Используем встроенную модель пользователя Django как базу для Student или связываем через ForeignKey
+from django.contrib.auth.models import User
+
+LEVEL_CHOICES = [
+    ("A1", "A1"),
+    ("A2", "A2"),
+    ("B1", "B1"),
+    ("B2", "B2"),
+    ("C1", "C1"),
+    ("C2", "C2"),
+]
 
 
-# 1. Темы (например, "Krankenhaus", "Uhrzeit")
 class Topic(models.Model):
-    name = models.CharField(max_length=100, unique=True, verbose_name="Название темы")
-    description = models.TextField(blank=True, null=True, verbose_name="Описание")
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name="Название темы",
+    )
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Описание",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -19,10 +33,7 @@ class Topic(models.Model):
         ordering = ["name"]
 
 
-# 2. Ученики (Можно расширить встроенного User или сделать отдельную модель)
-# В вашем summary была модель Student. Сделаем отдельную для гибкости, связанную с User (опционально)
 class Student(models.Model):
-    # Если ученик имеет доступ к системе, можно связать с User (one-to-one), иначе просто профиль
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -30,13 +41,22 @@ class Student(models.Model):
         blank=True,
         related_name="student_profile",
     )
-    first_name = models.CharField(max_length=50, verbose_name="Имя")
-    last_name = models.CharField(max_length=50, verbose_name="Фамилия")
-    email = models.EmailField(unique=True, verbose_name="Email")
+    first_name = models.CharField(
+        max_length=50,
+        verbose_name="Имя",
+    )
+    last_name = models.CharField(
+        max_length=50,
+        verbose_name="Фамилия",
+    )
+    email = models.EmailField(
+        unique=True,
+        verbose_name="Email",
+    )
     level = models.CharField(
-        max_length=10,
+        max_length=2,
+        choices=LEVEL_CHOICES,
         default="A1",
-        choices=[("A1", "A1"), ("A2", "A2"), ("B1", "B1"), ("B2", "B2")],
         verbose_name="Уровень",
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -49,30 +69,49 @@ class Student(models.Model):
         verbose_name_plural = "Ученики"
 
 
-# 3. Упражнения (Основная сущность)
 class Exercise(models.Model):
     EXERCISE_TYPES = [
         ("vocabulary_drill", "Vocabulary Drill"),
+        ("multiple_choice", "Multiple Choice"),
+        ("dropdown", "Dropdown"),
         ("gap_fill", "Gap Fill"),
+        ("sentence_builder", "Sentence Builder"),
     ]
 
-    title = models.CharField(max_length=200, verbose_name="Название упражнения")
+    title = models.CharField(
+        max_length=200,
+        verbose_name="Название упражнения",
+    )
     exercise_type = models.CharField(
-        max_length=50, choices=EXERCISE_TYPES, verbose_name="Тип"
+        max_length=50,
+        choices=EXERCISE_TYPES,
+        verbose_name="Тип",
     )
     topics = models.ManyToManyField(
-        Topic, related_name="exercises", verbose_name="Темы"
+        Topic,
+        related_name="exercises",
+        verbose_name="Темы",
     )
-    language = models.CharField(max_length=20, default="german", verbose_name="Язык")
-    is_active = models.BooleanField(default=True, verbose_name="Активно")
-    
-    # 👇 НОВОЕ ПОЛЕ
+    language = models.CharField(
+        max_length=20,
+        default="german",
+        verbose_name="Язык",
+    )
+    level = models.CharField(
+        max_length=2,
+        choices=LEVEL_CHOICES,
+        default="A1",
+        verbose_name="Уровень",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активно",
+    )
     order = models.PositiveIntegerField(
-        default=0, 
+        default=0,
         verbose_name="Порядок",
-        help_text="Определяет последовательность упражнений"
+        help_text="Определяет последовательность упражнений",
     )
-    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -82,95 +121,342 @@ class Exercise(models.Model):
     class Meta:
         verbose_name = "Упражнение"
         verbose_name_plural = "Упражнения"
-        ordering = ["order"]  # 👇 Меняем сортировку по умолчанию
-
-
-# 4. Карточки слов (Для vocabulary_drill)
-class VocabularyCard(models.Model):
-    exercise = models.ForeignKey(
-        Exercise,
-        on_delete=models.CASCADE,
-        related_name="vocabulary_cards",
-        verbose_name="Упражнение",
-    )
-    word = models.CharField(max_length=100, verbose_name="Слово (DE)")
-    correct_translation = models.CharField(
-        max_length=100, verbose_name="Правильный перевод"
-    )
-    distractor_1 = models.CharField(max_length=100, verbose_name="Дистрактор 1")
-    distractor_2 = models.CharField(max_length=100, verbose_name="Дистрактор 2")
-    distractor_3 = models.CharField(max_length=100, verbose_name="Дистрактор 3")
-    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
-
-    def __str__(self):
-        return f"{self.word} -> {self.correct_translation}"
-
-    class Meta:
-        verbose_name = "Карточка слова"
-        verbose_name_plural = "Карточки слов"
         ordering = ["order"]
 
 
-# 5. Предложения и опции (Для gap_fill)
-class Sentence(models.Model):
+class VocabularyItem(models.Model):
     exercise = models.ForeignKey(
         Exercise,
         on_delete=models.CASCADE,
-        related_name="sentences",
+        related_name="vocabulary_items",
         verbose_name="Упражнение",
     )
-    text = models.TextField(verbose_name="Текст предложения")
-    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    prompt = models.CharField(
+        max_length=200,
+        verbose_name="Задание",
+    )
+    correct_answer = models.CharField(
+        max_length=200,
+        verbose_name="Правильный ответ",
+    )
+    distractor_1 = models.CharField(
+        max_length=200,
+        verbose_name="Дистрактор 1",
+    )
+    distractor_2 = models.CharField(
+        max_length=200,
+        verbose_name="Дистрактор 2",
+    )
+    distractor_3 = models.CharField(
+        max_length=200,
+        verbose_name="Дистрактор 3",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
 
     def __str__(self):
-        return self.text[:50]
+        return f"{self.prompt} -> {self.correct_answer}"
 
     class Meta:
-        verbose_name = "Предложение"
-        verbose_name_plural = "Предложения"
+        verbose_name = "Элемент Vocabulary Drill"
+        verbose_name_plural = "Элементы Vocabulary Drill"
         ordering = ["order"]
 
 
-class GapOption(models.Model):
-    sentence = models.ForeignKey(
-        Sentence,
+class MultipleChoiceItem(models.Model):
+    SELECTION_MODES = [
+        ("single", "Single"),
+        ("multiple", "Multiple"),
+    ]
+
+    exercise = models.ForeignKey(
+        Exercise,
         on_delete=models.CASCADE,
-        related_name="gap_options",
-        verbose_name="Предложение",
+        related_name="multiple_choice_items",
+        verbose_name="Упражнение",
     )
-    placeholder_index = models.PositiveIntegerField(
-        verbose_name="Индекс пропуска"
-    )  # Какой по счету пропуск в тексте
-    options = models.JSONField(
-        verbose_name="Варианты ответов"
-    )  # Список вариантов ["der Arzt", "die Apotheke"]
-    correct_answer = models.CharField(max_length=100, verbose_name="Правильный ответ")
+    question = models.TextField(
+        verbose_name="Вопрос",
+    )
+    selection_mode = models.CharField(
+        max_length=10,
+        choices=SELECTION_MODES,
+        default="single",
+        verbose_name="Режим выбора",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
 
     def __str__(self):
-        return f"Пропуск #{self.placeholder_index} в '{self.sentence.text[:20]}...'"
+        return self.question[:80]
 
     class Meta:
-        verbose_name = "Опция пропуска"
-        verbose_name_plural = "Опции пропусков"
+        verbose_name = "Элемент Multiple Choice"
+        verbose_name_plural = "Элементы Multiple Choice"
+        ordering = ["order"]
 
 
-# 6. Результаты и прогресс
+class MultipleChoiceOption(models.Model):
+    item = models.ForeignKey(
+        MultipleChoiceItem,
+        on_delete=models.CASCADE,
+        related_name="options",
+        verbose_name="Вопрос",
+    )
+    text = models.TextField(
+        verbose_name="Текст варианта",
+    )
+    is_correct = models.BooleanField(
+        default=False,
+        verbose_name="Правильный",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
+
+    def __str__(self):
+        return self.text[:80]
+
+    class Meta:
+        verbose_name = "Вариант Multiple Choice"
+        verbose_name_plural = "Варианты Multiple Choice"
+        ordering = ["order"]
+
+
+class DropdownItem(models.Model):
+    exercise = models.ForeignKey(
+        Exercise,
+        on_delete=models.CASCADE,
+        related_name="dropdown_items",
+        verbose_name="Упражнение",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
+
+    def __str__(self):
+        return f"Dropdown #{self.pk}"
+
+    class Meta:
+        verbose_name = "Элемент Dropdown"
+        verbose_name_plural = "Элементы Dropdown"
+        ordering = ["order"]
+
+
+class DropdownPart(models.Model):
+    PART_TYPES = [
+        ("text", "Text"),
+        ("select", "Select"),
+    ]
+
+    item = models.ForeignKey(
+        DropdownItem,
+        on_delete=models.CASCADE,
+        related_name="parts",
+        verbose_name="Элемент",
+    )
+    part_type = models.CharField(
+        max_length=10,
+        choices=PART_TYPES,
+        verbose_name="Тип части",
+    )
+    text = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Текст",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
+
+    def __str__(self):
+        return f"{self.get_part_type_display()} #{self.pk}"
+
+    class Meta:
+        verbose_name = "Часть Dropdown"
+        verbose_name_plural = "Части Dropdown"
+        ordering = ["order"]
+
+
+class DropdownOption(models.Model):
+    part = models.ForeignKey(
+        DropdownPart,
+        on_delete=models.CASCADE,
+        related_name="options",
+        verbose_name="Часть",
+    )
+    text = models.CharField(
+        max_length=200,
+        verbose_name="Текст варианта",
+    )
+    is_correct = models.BooleanField(
+        default=False,
+        verbose_name="Правильный",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
+
+    def __str__(self):
+        return self.text
+
+    class Meta:
+        verbose_name = "Вариант Dropdown"
+        verbose_name_plural = "Варианты Dropdown"
+        ordering = ["order"]
+
+
+class GapFillItem(models.Model):
+    exercise = models.ForeignKey(
+        Exercise,
+        on_delete=models.CASCADE,
+        related_name="gap_fill_items",
+        verbose_name="Упражнение",
+    )
+    text = models.TextField(
+        verbose_name="Текст задания",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
+
+    def __str__(self):
+        return self.text[:80]
+
+    class Meta:
+        verbose_name = "Элемент Gap Fill"
+        verbose_name_plural = "Элементы Gap Fill"
+        ordering = ["order"]
+
+
+class GapFillGap(models.Model):
+    item = models.ForeignKey(
+        GapFillItem,
+        on_delete=models.CASCADE,
+        related_name="gaps",
+        verbose_name="Элемент",
+    )
+    placeholder = models.CharField(
+        max_length=50,
+        verbose_name="Идентификатор пропуска",
+        help_text='Например: "gap_1"',
+    )
+    correct_answer = models.CharField(
+        max_length=200,
+        verbose_name="Правильный ответ",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
+
+    def __str__(self):
+        return f"{self.placeholder}: {self.correct_answer}"
+
+    class Meta:
+        verbose_name = "Пропуск Gap Fill"
+        verbose_name_plural = "Пропуски Gap Fill"
+        ordering = ["order"]
+
+
+class SentenceBuilderItem(models.Model):
+    exercise = models.ForeignKey(
+        Exercise,
+        on_delete=models.CASCADE,
+        related_name="sentence_builder_items",
+        verbose_name="Упражнение",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
+
+    def __str__(self):
+        return f"Sentence Builder #{self.pk}"
+
+    class Meta:
+        verbose_name = "Элемент Sentence Builder"
+        verbose_name_plural = "Элементы Sentence Builder"
+        ordering = ["order"]
+
+
+class SentenceBuilderToken(models.Model):
+    item = models.ForeignKey(
+        SentenceBuilderItem,
+        on_delete=models.CASCADE,
+        related_name="tokens",
+        verbose_name="Элемент",
+    )
+    text = models.CharField(
+        max_length=200,
+        verbose_name="Текст токена",
+    )
+    correct_position = models.PositiveIntegerField(
+        verbose_name="Правильная позиция",
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Порядок",
+    )
+
+    def __str__(self):
+        return self.text
+
+    class Meta:
+        verbose_name = "Токен Sentence Builder"
+        verbose_name_plural = "Токены Sentence Builder"
+        ordering = ["order"]
+
+
 class ExerciseResult(models.Model):
     student = models.ForeignKey(
-        Student, on_delete=models.CASCADE, related_name="results"
+        Student,
+        on_delete=models.CASCADE,
+        related_name="results",
+        verbose_name="Ученик",
     )
     exercise = models.ForeignKey(
-        Exercise, on_delete=models.CASCADE, related_name="results"
+        Exercise,
+        on_delete=models.CASCADE,
+        related_name="results",
+        verbose_name="Упражнение",
     )
-    score = models.IntegerField(default=0, verbose_name="Баллы")
-    total_questions = models.IntegerField(default=0, verbose_name="Всего вопросов")
-    completed_at = models.DateTimeField(auto_now_add=True)
+    score = models.FloatField(
+        default=0.0,
+        verbose_name="Баллы",
+    )
+    max_score = models.FloatField(
+        default=0.0,
+        verbose_name="Максимальный балл",
+    )
+    percentage = models.FloatField(
+        default=0.0,
+        verbose_name="Процент",
+    )
     details = models.JSONField(
-        default=dict, blank=True, verbose_name="Детали ответа"
-    )  # Храним JSON с ответами
+        default=dict,
+        blank=True,
+        verbose_name="Детали результата",
+    )
+    completed_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Завершено",
+    )
 
     def __str__(self):
-        return f"{self.student} - {self.exercise.title} ({self.score}/{self.total_questions})"
+        return (
+            f"{self.student} - {self.exercise.title} "
+            f"({self.score}/{self.max_score})"
+        )
 
     class Meta:
         verbose_name = "Результат упражнения"
@@ -180,19 +466,28 @@ class ExerciseResult(models.Model):
 
 class StudentTopicProgress(models.Model):
     student = models.ForeignKey(
-        Student, on_delete=models.CASCADE, related_name="topic_progress"
+        Student,
+        on_delete=models.CASCADE,
+        related_name="topic_progress",
+        verbose_name="Ученик",
     )
     topic = models.ForeignKey(
-        Topic, on_delete=models.CASCADE, related_name="student_progress"
+        Topic,
+        on_delete=models.CASCADE,
+        related_name="student_progress",
+        verbose_name="Тема",
     )
     exercises_completed = models.IntegerField(
-        default=0, verbose_name="Выполнено упражнений"
+        default=0,
+        verbose_name="Выполнено упражнений",
     )
     last_practiced = models.DateTimeField(
-        auto_now=True, verbose_name="Последняя практика"
+        auto_now=True,
+        verbose_name="Последняя практика",
     )
     mastery_level = models.FloatField(
-        default=0.0, verbose_name="Уровень освоения (0-1)"
+        default=0.0,
+        verbose_name="Уровень освоения (0-1)",
     )
 
     def __str__(self):
@@ -201,4 +496,9 @@ class StudentTopicProgress(models.Model):
     class Meta:
         verbose_name = "Прогресс по теме"
         verbose_name_plural = "Прогресс по темам"
-        unique_together = ("student", "topic")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "topic"],
+                name="unique_student_topic_progress",
+            ),
+        ]
