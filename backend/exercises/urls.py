@@ -9,6 +9,7 @@ from .views import (
     StudentHistoryView,
     StudentProgressView,
     StudentRecommendationsView,
+    ExerciseImportValidateView,
 )
 
 urlpatterns = [
@@ -40,6 +41,14 @@ urlpatterns = [
         "admin/exercises/import/",
         ExerciseImportView.as_view(),
         name="exercise-import",
+    ),
+    # --------------------------------------------------------
+    # Exercise import / validation
+    # --------------------------------------------------------
+    path(
+        "admin/exercises/import/validate/",
+        ExerciseImportValidateView.as_view(),
+        name="exercise-import-validate",
     ),
     # --------------------------------------------------------
     # Recommendations

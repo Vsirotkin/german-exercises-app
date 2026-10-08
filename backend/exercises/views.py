@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404
 
 from rest_framework import status
 from rest_framework.generics import ListAPIView
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -21,6 +21,7 @@ from .serializers import (
     ExerciseCreateSerializer,
     ExerciseResultSerializer,
 )
+from .services.exercise_import import ExerciseImportService
 
 # ============================================================
 # 1. Получение полного упражнения
@@ -71,9 +72,11 @@ class ExerciseImportView(APIView):
 
     Полная структура создания будет определяться
     новым ExerciseCreateSerializer.
+
+    Доступ только для staff/admin пользователей.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @transaction.atomic
     def post(self, request):
@@ -98,6 +101,40 @@ class ExerciseImportView(APIView):
         return Response(
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+class ExerciseImportValidateView(APIView):
+    """
+    POST /api/admin/exercises/import/validate/
+
+    Проверяет JSON упражнения без записи в базу данных.
+
+    Доступ только для staff/admin пользователей.
+
+    Возвращает:
+
+        {
+            "valid": true/false,
+            "errors": [...],
+            "summary": {...}
+        }
+
+    ВАЖНО:
+    Валидация выполняется через ExerciseImportService.
+    View не содержит собственной бизнес-логики валидации.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        service = ExerciseImportService()
+
+        preview = service.preview(request.data)
+
+        return Response(
+            preview,
+            status=status.HTTP_200_OK,
         )
 
 

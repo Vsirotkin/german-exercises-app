@@ -257,29 +257,11 @@ class ExerciseResultAPITest(BaseAPITestCase):
         )
 
 
-class ExerciseImportAPITest(BaseAPITestCase):
-    def test_import_requires_authentication(self):
+class ExerciseImportPermissionAPITest(BaseAPITestCase):
+    def test_import_rejects_unauthenticated_user(self):
         response = self.client.post(
             "/api/admin/exercises/import/",
-            {
-                "title": "Test Import",
-                "exercise_type": "vocabulary_drill",
-                "topics": ["Test"],
-                "language": "german",
-                "level": "A1",
-                "is_active": True,
-                "order": 10,
-                "vocabulary_items": [
-                    {
-                        "prompt": "Haus",
-                        "correct_answer": "дом",
-                        "distractor_1": "машина",
-                        "distractor_2": "стол",
-                        "distractor_3": "книга",
-                        "order": 0,
-                    }
-                ],
-            },
+            {},
             format="json",
         )
 
@@ -288,10 +270,61 @@ class ExerciseImportAPITest(BaseAPITestCase):
             status.HTTP_401_UNAUTHORIZED,
         )
 
-    def test_authenticated_user_can_create_exercise_via_current_api(self):
+    def test_import_rejects_authenticated_non_staff_user(self):
         self.authenticate()
 
-        payload = {
+        response = self.client.post(
+            "/api/admin/exercises/import/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_import_allows_staff_user(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/admin/exercises/import/",
+            {},
+            format="json",
+        )
+
+        self.assertNotEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_import_allows_superuser(self):
+        self.user.is_staff = True
+        self.user.is_superuser = True
+        self.user.save(
+            update_fields=["is_staff", "is_superuser"],
+        )
+
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/admin/exercises/import/",
+            {},
+            format="json",
+        )
+
+        self.assertNotEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+class ExerciseImportAPITest(BaseAPITestCase):
+    def get_import_payload(self):
+        return {
             "title": "API Import Test",
             "exercise_type": "vocabulary_drill",
             "topics": ["API Test"],
@@ -311,9 +344,45 @@ class ExerciseImportAPITest(BaseAPITestCase):
             ],
         }
 
+    def test_import_requires_authentication(self):
         response = self.client.post(
             "/api/admin/exercises/import/",
-            payload,
+            self.get_import_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_authenticated_non_staff_user_cannot_create_exercise(self):
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/admin/exercises/import/",
+            self.get_import_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        self.assertFalse(
+            Exercise.objects.filter(title="API Import Test").exists(),
+        )
+
+    def test_staff_user_can_create_exercise_via_current_api(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/admin/exercises/import/",
+            self.get_import_payload(),
             format="json",
         )
 
@@ -322,7 +391,9 @@ class ExerciseImportAPITest(BaseAPITestCase):
             status.HTTP_201_CREATED,
         )
 
-        exercise = Exercise.objects.get(title="API Import Test")
+        exercise = Exercise.objects.get(
+            title="API Import Test",
+        )
 
         self.assertEqual(
             exercise.exercise_type,
@@ -337,4 +408,173 @@ class ExerciseImportAPITest(BaseAPITestCase):
         self.assertEqual(
             exercise.vocabulary_items.count(),
             1,
+        )
+
+
+class ExerciseImportValidateAPITest(BaseAPITestCase):
+    def get_valid_import_payload(self):
+        return {
+            "version": 1,
+            "language": "german",
+            "exercises": [
+                {
+                    "title": "Validation Test",
+                    "type": "vocabulary_drill",
+                    "level": "A1",
+                    "topics": ["Validation"],
+                    "active": True,
+                    "order": 1,
+                    "data": {
+                        "items": [
+                            {
+                                "word": "das Haus",
+                                "correct": "дом",
+                                "distractors": [
+                                    "машина",
+                                    "школа",
+                                    "магазин",
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+
+    def authenticate_as_staff(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+        self.authenticate()
+
+    def test_validate_requires_authentication(self):
+        response = self.client.post(
+            "/api/admin/exercises/import/validate/",
+            self.get_valid_import_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_validate_rejects_authenticated_non_staff_user(self):
+        self.authenticate()
+
+        response = self.client.post(
+            "/api/admin/exercises/import/validate/",
+            self.get_valid_import_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_validate_accepts_valid_payload_for_staff_user(self):
+        self.authenticate_as_staff()
+
+        exercise_count_before = Exercise.objects.count()
+        topic_count_before = Topic.objects.count()
+
+        response = self.client.post(
+            "/api/admin/exercises/import/validate/",
+            self.get_valid_import_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertTrue(response.data["valid"])
+        self.assertEqual(response.data["errors"], [])
+        self.assertEqual(
+            response.data["summary"]["exercise_count"],
+            1,
+        )
+        self.assertEqual(
+            response.data["summary"]["language"],
+            "german",
+        )
+        self.assertEqual(
+            response.data["summary"]["version"],
+            1,
+        )
+
+        self.assertEqual(
+            Exercise.objects.count(),
+            exercise_count_before,
+        )
+        self.assertEqual(
+            Topic.objects.count(),
+            topic_count_before,
+        )
+
+    def test_validate_returns_errors_for_invalid_business_rules(self):
+        self.authenticate_as_staff()
+
+        payload = self.get_valid_import_payload()
+        payload["exercises"][0]["data"]["items"][0]["distractors"] = [
+            "машина",
+            "машина",
+            "магазин",
+        ]
+
+        response = self.client.post(
+            "/api/admin/exercises/import/validate/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertFalse(response.data["valid"])
+        self.assertTrue(response.data["errors"])
+
+        self.assertEqual(
+            Exercise.objects.count(),
+            2,
+        )
+
+    def test_validate_does_not_create_exercises(self):
+        self.authenticate_as_staff()
+
+        payload = self.get_valid_import_payload()
+
+        exercise_count_before = Exercise.objects.count()
+
+        response = self.client.post(
+            "/api/admin/exercises/import/validate/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertTrue(response.data["valid"])
+
+        self.assertEqual(
+            Exercise.objects.count(),
+            exercise_count_before,
+        )
+
+
+    def test_validate_rejects_malformed_json(self):
+        self.authenticate_as_staff()
+
+        response = self.client.post(
+            "/api/admin/exercises/import/validate/",
+            '{"version": 1, "language": "german", "exercises": [}',
+            content_type="application/json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
         )
