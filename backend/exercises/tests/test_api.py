@@ -229,7 +229,7 @@ class ExerciseResultAPITest(BaseAPITestCase):
             "INVALID_ANSWERS",
         )
 
-    def test_result_endpoint_currently_returns_not_implemented(self):
+    def test_result_endpoint_saves_empty_exercise_result(self):
         self.authenticate()
 
         response = self.client.post(
@@ -243,18 +243,22 @@ class ExerciseResultAPITest(BaseAPITestCase):
 
         self.assertEqual(
             response.status_code,
-            status.HTTP_501_NOT_IMPLEMENTED,
+            status.HTTP_201_CREATED,
         )
+        self.assertEqual(response.data["exercise_id"], self.exercise_1.id)
+        self.assertEqual(response.data["score"], 0)
+        self.assertEqual(response.data["max_score"], 1)
+        self.assertEqual(response.data["percentage"], 0.0)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertFalse(response.data["results"][0]["is_correct"])
 
-        self.assertEqual(
-            response.data["error"]["code"],
-            "EVALUATOR_NOT_IMPLEMENTED",
-        )
+        self.assertEqual(ExerciseResult.objects.count(), 1)
 
-        self.assertEqual(
-            ExerciseResult.objects.count(),
-            0,
-        )
+        result = ExerciseResult.objects.get()
+        self.assertEqual(result.exercise, self.exercise_1)
+        self.assertEqual(result.score, 0)
+        self.assertEqual(result.max_score, 1)
+        self.assertEqual(result.percentage, 0.0)
 
 
 class ExerciseImportPermissionAPITest(BaseAPITestCase):

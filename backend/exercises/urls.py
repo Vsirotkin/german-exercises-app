@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     CurrentUserView,
+    ExerciseBatchImportView,
     ExerciseDetailView,
     ExerciseImportView,
     ExerciseListView,
@@ -49,6 +50,14 @@ urlpatterns = [
         "admin/exercises/import/validate/",
         ExerciseImportValidateView.as_view(),
         name="exercise-import-validate",
+    ),
+    # --------------------------------------------------------
+    # Exercise batch import
+    # --------------------------------------------------------
+    path(
+        "admin/exercises/import/batch/",
+        ExerciseBatchImportView.as_view(),
+        name="exercise-batch-import",
     ),
     # --------------------------------------------------------
     # Recommendations

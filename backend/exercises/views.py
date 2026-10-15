@@ -21,7 +21,15 @@ from .serializers import (
     ExerciseCreateSerializer,
     ExerciseResultSerializer,
 )
-from .services.exercise_import import ExerciseImportService
+from .services.exercise_import import (
+    ExerciseImportService,
+    ExerciseImportValidationError,
+)
+
+from .services.evaluator import (
+    EvaluationError,
+    evaluate_answers,
+)
 
 # ============================================================
 # 1. Получение полного упражнения
@@ -135,6 +143,35 @@ class ExerciseImportValidateView(APIView):
         return Response(
             preview,
             status=status.HTTP_200_OK,
+        )
+
+
+class ExerciseBatchImportView(APIView):
+    """
+    POST /api/admin/exercises/import/batch/
+
+    Пакетный импорт JSON-документа упражнений через ExerciseImportService.
+    Доступ только для staff/admin пользователей.
+
+    Возвращает:
+        Успех: 201 {"imported_count": N}
+        Ошибка валидации: 400 {"errors": [...]}
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        service = ExerciseImportService()
+        try:
+            count = service.import_exercises(request.data)
+        except ExerciseImportValidationError as exc:
+            return Response(
+                {"errors": exc.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {"imported_count": count},
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -391,38 +428,8 @@ class StudentHistoryView(APIView):
 
 
 def _evaluate_answers(exercise, answers):
-    """
-    Временная точка входа для evaluator.
-
-    Здесь пока НЕ реализуем сам алгоритм проверки.
-
-    Следующим шагом эта логика будет вынесена в отдельный модуль:
-
-        exercises/services/evaluator.py
-
-    и будет поддерживать:
-
-        vocabulary_drill
-        multiple_choice
-        dropdown
-        gap_fill
-        sentence_builder
-
-    Возвращаемый формат:
-
-    {
-        "score": 0.0,
-        "max_score": 0.0,
-        "percentage": 0.0,
-        "results": []
-    }
-
-    ВАЖНО:
-    canonical correct answers никогда не должны попадать
-    в сохранённый details.
-    """
-
-    raise NotImplementedError("Exercise evaluator is not implemented yet.")
+    """Delegate answer evaluation to the dedicated service."""
+    return evaluate_answers(exercise, answers)
 
 
 # ============================================================
@@ -511,15 +518,15 @@ class ExerciseResultView(APIView):
                 answers=answers,
             )
 
-        except NotImplementedError as exc:
+        except EvaluationError as exc:
             return Response(
                 {
                     "error": {
-                        "code": "EVALUATOR_NOT_IMPLEMENTED",
+                        "code": "INVALID_ANSWERS",
                         "message": str(exc),
                     }
                 },
-                status=status.HTTP_501_NOT_IMPLEMENTED,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # ----------------------------------------------------

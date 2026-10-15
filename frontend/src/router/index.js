@@ -2,30 +2,38 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import LoginPage from '@/pages/LoginPage.vue'
 import DashboardPage from '@/pages/DashboardPage.vue'
+import ExercisesPage from '@/pages/ExercisesPage.vue'
+import ExercisePage from '@/pages/ExercisePage.vue'
 
 const routes = [
   {
     path: '/login',
     name: 'login',
     component: LoginPage,
-    meta: {
-      requiresGuest: true,
-    },
+    meta: { requiresGuest: true },
   },
   {
     path: '/',
     component: DashboardPage,
-    meta: {
-      requiresAuth: true,
-    },
+    meta: { requiresAuth: true },
   },
   {
     path: '/dashboard',
     name: 'dashboard',
     component: DashboardPage,
-    meta: {
-      requiresAuth: true,
-    },
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/exercises',
+    name: 'exercises',
+    component: ExercisesPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/exercises/:id',
+    name: 'exercise',
+    component: ExercisePage,
+    meta: { requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -49,9 +57,7 @@ router.beforeEach((to) => {
   }
 
   if (to.meta.requiresGuest && token) {
-    return {
-      name: 'dashboard',
-    }
+    return { name: 'dashboard' }
   }
 
   return true

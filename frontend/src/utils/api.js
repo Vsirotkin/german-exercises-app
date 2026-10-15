@@ -139,6 +139,16 @@ export const api = {
     const res = await apiClient.get(`/results/student/${studentId}/`)
     return res.data
   },
+
+  async validateExerciseImport(data) {
+    const res = await apiClient.post('/admin/exercises/import/validate/', data)
+    return res.data
+  },
+
+  async batchImportExercises(data) {
+    const res = await apiClient.post('/admin/exercises/import/batch/', data)
+    return res.data
+  },
 }
 
 export default apiClient

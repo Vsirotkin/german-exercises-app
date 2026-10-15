@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -150,6 +152,26 @@ class VocabularyItem(models.Model):
     distractor_3 = models.CharField(
         max_length=200,
         verbose_name="Дистрактор 3",
+    )
+    correct_option_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="ID правильного варианта",
+    )
+    distractor_1_option_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="ID дистрактора 1",
+    )
+    distractor_2_option_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="ID дистрактора 2",
+    )
+    distractor_3_option_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="ID дистрактора 3",
     )
     order = models.PositiveIntegerField(
         default=0,

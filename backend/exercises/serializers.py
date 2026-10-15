@@ -88,38 +88,30 @@ class VocabularyItemSerializer(serializers.ModelSerializer):
         ]
 
     def get_options(self, obj):
+        import random
+
         options = [
             {
-                "id": "a",
+                "id": str(obj.correct_option_id),
                 "text": obj.correct_answer,
             },
             {
-                "id": "b",
+                "id": str(obj.distractor_1_option_id),
                 "text": obj.distractor_1,
             },
             {
-                "id": "c",
+                "id": str(obj.distractor_2_option_id),
                 "text": obj.distractor_2,
             },
             {
-                "id": "d",
+                "id": str(obj.distractor_3_option_id),
                 "text": obj.distractor_3,
             },
         ]
 
-        # Перемешивание выполняется на backend.
-        # Правильный ответ при этом не помечается.
-        import random
-
         random.shuffle(options)
 
-        return [
-            {
-                "id": chr(ord("a") + index),
-                "text": option["text"],
-            }
-            for index, option in enumerate(options)
-        ]
+        return options
 
 
 # ============================================================
