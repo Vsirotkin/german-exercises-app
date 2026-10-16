@@ -125,6 +125,11 @@ export const api = {
     return res.data
   },
 
+  async checkExerciseAnswer(data) {
+    const res = await apiClient.post('/results/check-answer/', data)
+    return res.data
+  },
+
   async saveExerciseResult(resultData) {
     const res = await apiClient.post('/results/', resultData)
     return res.data

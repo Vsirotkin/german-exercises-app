@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from .models import (
     Exercise,
     ExerciseResult,
+    MultipleChoiceItem,
     Student,
     Topic,
 )
@@ -435,6 +436,46 @@ def _evaluate_answers(exercise, answers):
 # ============================================================
 # 10. Сохранение результата упражнения
 # ============================================================
+
+
+class ExerciseAnswerCheckView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        exercise_id = request.data.get("exercise_id")
+        item_id = request.data.get("item_id")
+        if not exercise_id or not item_id or "answer" not in request.data:
+            return Response({"error": {"code": "INVALID_ANSWER_CHECK",
+                "message": "exercise_id, item_id and answer are required."}},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        exercise = get_object_or_404(
+            Exercise, pk=exercise_id, is_active=True,
+            exercise_type="multiple_choice")
+        item = get_object_or_404(
+            MultipleChoiceItem, pk=item_id, exercise=exercise)
+
+        if item.selection_mode != "single":
+            return Response({"error": {"code": "UNSUPPORTED_SELECTION_MODE",
+                "message": "Only single-choice cards are supported."}},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            evaluation = _evaluate_answers(exercise, [
+                {"item_id": item.pk, "answer": request.data["answer"]}
+            ])
+        except EvaluationError as exc:
+            return Response({"error": {"code": "INVALID_ANSWER",
+                "message": str(exc)}}, status=status.HTTP_400_BAD_REQUEST)
+
+        checked = next(r for r in evaluation["results"]
+                       if r["item_id"] == item.pk)
+        data = {"exercise_id": exercise.pk, "item_id": item.pk,
+                "is_correct": checked["is_correct"]}
+        if not checked["is_correct"]:
+            data["correct_answer"] = item.options.filter(
+                is_correct=True).values_list("text", flat=True).first()
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class ExerciseResultView(APIView):

@@ -351,20 +351,22 @@ def _evaluate_sentence_builder(exercise, submissions):
             results.append(_result(item.pk, False))
             continue
 
-        expected_ids = [
-            f"t{token.pk}"
-            for token in sorted(
-                tokens,
-                key=lambda token: (token.correct_position, token.pk),
-            )
-        ]
+        correct_tokens = sorted(
+            tokens,
+            key=lambda token: (token.correct_position, token.pk),
+        )
+        expected_ids = [f"t{token.pk}" for token in correct_tokens]
 
         is_correct = (
             len(submitted_ids) == len(expected_ids)
             and submitted_ids == expected_ids
         )
 
-        results.append(_result(item.pk, is_correct))
+        item_result = _result(item.pk, is_correct)
+        item_result["correct_answer"] = " ".join(
+            token.text for token in correct_tokens
+        )
+        results.append(item_result)
 
     return results
 

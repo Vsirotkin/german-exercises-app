@@ -4,6 +4,7 @@ from .views import (
     CurrentUserView,
     ExerciseBatchImportView,
     ExerciseDetailView,
+    ExerciseAnswerCheckView,
     ExerciseImportView,
     ExerciseListView,
     ExerciseResultView,
@@ -83,6 +84,11 @@ urlpatterns = [
     # --------------------------------------------------------
     # Submit exercise result
     # --------------------------------------------------------
+    path(
+        "results/check-answer/",
+        ExerciseAnswerCheckView.as_view(),
+        name="exercise-answer-check",
+    ),
     path(
         "results/",
         ExerciseResultView.as_view(),

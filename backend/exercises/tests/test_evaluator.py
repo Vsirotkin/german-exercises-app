@@ -438,7 +438,19 @@ class ExerciseEvaluatorTestCase(TestCase):
             }],
         )
         self.assert_evaluation(wrong_result, 0, 1, 0)
-        self.assert_safe_result_items(correct_result)
+
+        correct_item_result = correct_result["results"][0]
+        self.assertEqual(
+            correct_item_result["correct_answer"],
+            "Ich lerne Deutsch.",
+        )
+
+        wrong_item_result = wrong_result["results"][0]
+        self.assertEqual(
+            wrong_item_result["correct_answer"],
+            "Ich lerne Deutsch.",
+        )
+        self.assertFalse(wrong_item_result["is_correct"])
 
     def test_missing_answer_scores_zero_but_keeps_max_score(self):
         exercise = self.create_exercise("gap_fill")

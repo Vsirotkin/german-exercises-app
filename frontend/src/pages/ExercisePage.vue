@@ -1,355 +1,679 @@
-
-<template>
-  <div class="min-h-screen bg-gray-50">
-    <div class="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
-      <!-- Loading -->
-      <div
-        v-if="loading"
-        class="rounded-xl bg-white p-8 text-center shadow-sm"
-      >
-        <p class="text-gray-500">Übung wird geladen...</p>
-      </div>
-
-      <!-- Error -->
-      <div
-        v-else-if="error"
-        class="rounded-xl border border-red-200 bg-red-50 p-6"
-      >
-        <h2 class="text-lg font-semibold text-red-800">Fehler</h2>
-        <p class="mt-2 text-red-700">{{ error }}</p>
-
-        <button
-          type="button"
-          class="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-          @click="router.push({ name: 'exercises' })"
-        >
-          Zurück zu den Übungen
-        </button>
-      </div>
-
-      <!-- Exercise -->
-      <div v-else-if="exercise && !finished">
-        <div class="mb-6">
-          <button
-            type="button"
-            class="mb-4 text-sm text-gray-500 hover:text-gray-900"
-            @click="router.push({ name: 'exercises' })"
-          >
-            ← Zurück zu den Übungen
-          </button>
-
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="text-sm font-medium text-blue-600">
-                {{ exercise.topics?.join(', ') }}
-              </p>
-
-              <h1 class="mt-1 text-2xl font-bold text-gray-900">
-                {{ exercise.title }}
-              </h1>
-            </div>
-
-            <div
-              class="shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-600"
-            >
-              {{ currentIndex + 1 }} / {{ cards.length }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Progress -->
-        <div class="mb-8 h-2 overflow-hidden rounded-full bg-gray-200">
-          <div
-            class="h-full bg-blue-600 transition-all duration-300"
-            :style="{ width: `${progress}%` }"
-          />
-        </div>
-
-        <!-- Question -->
-        <div class="rounded-2xl bg-white p-6 shadow-sm sm:p-8">
-          <div class="text-center">
-            <p class="text-sm text-gray-500">
-              Wähle die richtige Übersetzung
-            </p>
-
-            <h2 class="mt-4 text-3xl font-bold text-gray-900">
-              {{ currentCard.prompt }}
-            </h2>
-          </div>
-
-          <!-- Options from backend -->
-          <div class="mt-8 grid gap-3">
-            <button
-              v-for="option in currentCard.options"
-              :key="option.id"
-              type="button"
-              class="w-full rounded-xl border px-5 py-4 text-left text-base font-medium transition"
-              :class="
-                selectedOptionId === option.id
-                  ? 'border-blue-500 bg-blue-50 text-blue-800'
-                  : 'border-gray-200 bg-white text-gray-800 hover:border-blue-400 hover:bg-blue-50'
-              "
-              @click="selectOption(option.id)"
-            >
-              {{ option.text }}
-            </button>
-          </div>
-
-          <p class="mt-5 text-sm text-gray-500">
-            Die Antwort wird nach Abschluss der Übung vom Server überprüft.
-          </p>
-
-          <!-- Navigation -->
-          <div class="mt-6 flex justify-end">
-            <button
-              type="button"
-              :disabled="!selectedOptionId"
-              class="rounded-xl bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              @click="nextCard"
-            >
-              {{ isLastCard ? 'Übung abschließen' : 'Nächste Karte →' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Submitting -->
-      <div
-        v-else-if="submitting"
-        class="rounded-xl bg-white p-8 text-center shadow-sm"
-      >
-        <p class="text-gray-500">Antworten werden überprüft...</p>
-      </div>
-
-      <!-- Result -->
-      <div
-        v-else-if="finished && result"
-        class="rounded-2xl bg-white p-6 shadow-sm sm:p-8"
-      >
-        <div class="text-center">
-          <p class="text-sm font-medium text-blue-600">
-            Übung abgeschlossen
-          </p>
-
-          <h1 class="mt-2 text-3xl font-bold text-gray-900">
-            Fertig! 🎉
-          </h1>
-
-          <div class="mx-auto mt-8 max-w-sm rounded-2xl bg-gray-50 p-6">
-            <p class="text-sm text-gray-500">Ergebnis</p>
-
-            <p class="mt-2 text-5xl font-bold text-gray-900">
-              {{ result.score }} / {{ result.max_score }}
-            </p>
-
-            <p class="mt-2 text-gray-600">
-              {{ result.percentage }}% richtig
-            </p>
-          </div>
-        </div>
-
-        <!-- Per-question feedback from backend -->
-        <div class="mt-8 space-y-3">
-          <h2 class="text-lg font-semibold text-gray-900">
-            Deine Antworten
-          </h2>
-
-          <div
-            v-for="card in cards"
-            :key="card.id"
-            class="rounded-xl border p-4"
-            :class="
-              resultByItemId[card.id]?.is_correct
-                ? 'border-green-200 bg-green-50'
-                : 'border-red-200 bg-red-50'
-            "
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="font-semibold text-gray-900">
-                  {{ card.prompt }}
-                </p>
-
-                <p class="mt-1 text-sm text-gray-700">
-                  Deine Antwort:
-                  {{ selectedOptionText(card) }}
-                </p>
-              </div>
-
-              <span
-                class="shrink-0 text-sm font-semibold"
-                :class="
-                  resultByItemId[card.id]?.is_correct
-                    ? 'text-green-700'
-                    : 'text-red-700'
-                "
-              >
-                {{
-                  resultByItemId[card.id]?.is_correct
-                    ? 'Richtig ✓'
-                    : 'Falsch ✗'
-                }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-8 flex justify-center">
-          <button
-            type="button"
-            class="rounded-xl bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700"
-            @click="router.push({ name: 'exercises' })"
-          >
-            Zurück zu den Übungen
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from '@/utils/api'
 
 const route = useRoute()
-const router = useRouter()
 
 const exercise = ref(null)
 const loading = ref(true)
 const submitting = ref(false)
-const error = ref(null)
-const finished = ref(false)
-
-const currentIndex = ref(0)
-const answers = ref({})
+const error = ref('')
 const result = ref(null)
+const currentIndex = ref(0)
 
-const cards = computed(
-  () => exercise.value?.vocabulary_items || [],
-)
+const answers = reactive({})
+const checkedAnswers = reactive({})
+const checkingAnswerId = ref(null)
 
-const currentCard = computed(
-  () => cards.value[currentIndex.value],
-)
+const exerciseType = computed(() => exercise.value?.exercise_type)
 
-const selectedOptionId = computed(
-  () => {
-    const card = currentCard.value
-    return card ? answers.value[String(card.id)] || null : null
-  },
-)
+const cards = computed(() => {
+  if (!exercise.value) return []
 
-const isLastCard = computed(
-  () => currentIndex.value === cards.value.length - 1,
-)
+  switch (exerciseType.value) {
+    case 'vocabulary_drill':
+      return exercise.value.vocabulary_items || []
+    case 'multiple_choice':
+      return exercise.value.multiple_choice_items || []
+    case 'dropdown':
+      return exercise.value.dropdown_items || []
+    case 'gap_fill':
+      return exercise.value.gap_fill_items || []
+    case 'sentence_builder':
+      return exercise.value.sentence_builder_items || []
+    default:
+      return []
+  }
+})
 
-const progress = computed(
-  () => cards.value.length
-    ? ((currentIndex.value + 1) / cards.value.length) * 100
-    : 0,
+const currentCard = computed(() => cards.value[currentIndex.value])
+
+const isLastQuestion = computed(
+  () => currentIndex.value >= cards.value.length - 1,
 )
 
 const resultByItemId = computed(() => {
-  const lookup = {}
-
+  const map = {}
   for (const item of result.value?.results || []) {
-    lookup[String(item.item_id)] = item
+    map[String(item.item_id)] = item
   }
-
-  return lookup
+  return map
 })
 
-function selectOption(optionId) {
-  if (!currentCard.value || submitting.value) return
+function getSelectedOption(itemId, partId) {
+  const selectedId = answers[itemId]?.[String(partId)]
 
-  answers.value = {
-    ...answers.value,
-    [String(currentCard.value.id)]: optionId,
-  }
+  if (selectedId === undefined || selectedId === '') return null
+
+  const item = (exercise.value?.dropdown_items || []).find(
+    entry => String(entry.id) === String(itemId),
+  )
+  const part = item?.parts?.find(
+    entry => String(entry.id) === String(partId),
+  )
+
+  return part?.options?.find(
+    option => String(option.id) === String(selectedId),
+  ) || null
 }
 
-function selectedOptionText(card) {
-  const selectedId = answers.value[String(card.id)]
-
-  return card.options.find(
-    option => option.id === selectedId,
-  )?.text || 'Keine Antwort'
+function getOptionText(item, optionId) {
+  return item.options?.find(
+    option => String(option.id) === String(optionId),
+  )?.text || ''
 }
 
-async function nextCard() {
-  if (!selectedOptionId.value || submitting.value) return
+async function selectMultipleChoiceOption(card, optionId) {
+  if (checkedAnswers[card.id] || checkingAnswerId.value !== null) return
 
-  if (!isLastCard.value) {
-    currentIndex.value++
-    return
-  }
-
-  await submitAnswers()
-}
-
-async function submitAnswers() {
-  submitting.value = true
-  error.value = null
+  answers[card.id] = String(optionId)
+  checkingAnswerId.value = String(card.id)
+  error.value = ''
 
   try {
-    const payload = {
+    checkedAnswers[card.id] = await api.checkExerciseAnswer({
       exercise_id: exercise.value.id,
-      answers: cards.value.map(card => ({
-        item_id: card.id,
-        answer: answers.value[String(card.id)],
-      })),
+      item_id: card.id,
+      answer: String(optionId),
+    })
+  } catch (err) {
+    answers[card.id] = ''
+    error.value =
+      err.response?.data?.error?.message ||
+      err.response?.data?.detail ||
+      'Die Antwort konnte nicht geprüft werden. Bitte versuche es erneut.'
+  } finally {
+    checkingAnswerId.value = null
+  }
+}
+
+function setDropdownAnswer(itemId, partId, optionId) {
+  if (!answers[itemId]) {
+    answers[itemId] = {}
+  }
+
+  answers[itemId][String(partId)] = optionId
+}
+
+function setGapFillAnswer(itemId, gapId, value) {
+  if (!answers[itemId]) {
+    answers[itemId] = {}
+  }
+
+  answers[itemId][String(gapId)] = value
+}
+
+function addSentenceToken(itemId, tokenId) {
+  if (!Array.isArray(answers[itemId])) {
+    answers[itemId] = []
+  }
+
+  if (!answers[itemId].includes(tokenId)) {
+    answers[itemId].push(tokenId)
+  }
+}
+
+function removeSentenceToken(itemId, tokenId) {
+  if (!Array.isArray(answers[itemId])) return
+
+  answers[itemId] = answers[itemId].filter(id => id !== tokenId)
+}
+
+function getSentenceText(card) {
+  const selectedIds = answers[card.id] || []
+  const tokenById = new Map(
+    (card.tokens || []).map(token => [token.id, token.text]),
+  )
+
+  return selectedIds.map(id => tokenById.get(id) || '').filter(Boolean).join(' ')
+}
+
+function isSentenceTokenSelected(card, tokenId) {
+  return (answers[card.id] || []).includes(tokenId)
+}
+
+function getGapFillSegments(card) {
+  const text = String(card.text || '')
+  const gaps = card.gaps || []
+  const gapByPlaceholder = new Map(
+    gaps.map(gap => [gap.placeholder, gap]),
+  )
+  const segments = []
+  const pattern = /\{\{[^}]+\}\}/g
+  let lastIndex = 0
+  let match
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({
+        type: 'text',
+        value: text.slice(lastIndex, match.index),
+      })
     }
 
-    // The backend evaluates and saves the result.
-    result.value = await api.saveExerciseResult(payload)
-    finished.value = true
-  } catch (err) {
-    console.error('Exercise submission failed:', err)
+    const gap = gapByPlaceholder.get(match[0])
 
-    error.value =
-      err.response?.data?.error?.message
-      || 'Die Antworten konnten nicht überprüft werden. Bitte versuche es erneut.'
-  } finally {
-    submitting.value = false
+    if (gap) {
+      segments.push({ type: 'gap', gap })
+    } else {
+      segments.push({ type: 'text', value: match[0] })
+    }
+
+    lastIndex = pattern.lastIndex
   }
+
+  if (lastIndex < text.length) {
+    segments.push({
+      type: 'text',
+      value: text.slice(lastIndex),
+    })
+  }
+
+  return segments
+}
+
+function isAnswered(card) {
+  if (exerciseType.value === 'multiple_choice') {
+    return !!checkedAnswers[card.id]
+  }
+
+  if (exerciseType.value === 'sentence_builder') {
+    const tokens = card.tokens || []
+    const selected = answers[card.id] || []
+    return tokens.length > 0 && selected.length === tokens.length
+  }
+
+  if (exerciseType.value === 'gap_fill') {
+    const gaps = card.gaps || []
+
+    return gaps.length > 0 && gaps.every(gap => {
+      const value = answers[card.id]?.[String(gap.id)]
+      return typeof value === 'string' && value.trim() !== ''
+    })
+  }
+
+  if (exerciseType.value === 'dropdown') {
+    const selectableParts = (card.parts || []).filter(
+      part => part.part_type === 'select',
+    )
+    return selectableParts.length > 0 &&
+      selectableParts.every(part => {
+        const value = answers[card.id]?.[String(part.id)]
+        return value !== undefined && value !== ''
+      })
+  }
+
+  const value = answers[card.id]
+  return value !== undefined &&
+    value !== null &&
+    value !== '' &&
+    (!Array.isArray(value) || value.length > 0)
+}
+
+function getPrompt(card) {
+  if (exerciseType.value === 'multiple_choice') {
+    return card.question
+  }
+
+  return card.word || card.question || ''
 }
 
 async function loadExercise() {
   loading.value = true
-  error.value = null
+  error.value = ''
+  result.value = null
 
   try {
-    const id = route.params.id
-    const data = await api.getExerciseFull(id)
+    const data = await api.getExerciseFull(route.params.id)
+    exercise.value = data
 
-    if (!data || !Array.isArray(data.vocabulary_items)) {
-      throw new Error('Unexpected exercise response structure.')
-    }
-
-    if (data.exercise_type !== 'vocabulary_drill') {
+    if (![
+      'vocabulary_drill',
+      'multiple_choice',
+      'dropdown',
+      'gap_fill',
+      'sentence_builder',
+    ].includes(data.exercise_type)) {
       throw new Error(
         `Dieser Übungstyp wird auf dieser Seite noch nicht unterstützt: ${data.exercise_type}`,
       )
     }
 
-    if (data.vocabulary_items.length === 0) {
-      throw new Error('Diese Übung enthält noch keine Aufgaben.')
+    if (!cards.value.length) {
+      throw new Error('Dieses Übungsmodul enthält keine Aufgaben.')
     }
 
-    exercise.value = data
-  } catch (err) {
-    console.error('Exercise loading failed:', err)
+    for (const card of cards.value) {
+      if (['dropdown', 'gap_fill'].includes(data.exercise_type)) {
+        answers[card.id] = {}
+      } else if (data.exercise_type === 'sentence_builder') {
+        answers[card.id] = []
+      } else {
+        answers[card.id] = ''
+      }
+    }
 
+    currentIndex.value = 0
+  } catch (err) {
+    exercise.value = null
     error.value =
-      err.response?.data?.detail
-      || err.message
-      || 'Die Übung konnte nicht geladen werden.'
+      err.response?.data?.detail ||
+      err.message ||
+      'Die Übung konnte nicht geladen werden.'
   } finally {
     loading.value = false
   }
 }
 
+function nextQuestion() {
+  if (!currentCard.value || !isAnswered(currentCard.value)) {
+    error.value = 'Bitte beantworte zuerst die aktuelle Aufgabe.'
+    return
+  }
+
+  error.value = ''
+
+  if (!isLastQuestion.value) {
+    currentIndex.value += 1
+  }
+}
+
+function previousQuestion() {
+  if (currentIndex.value > 0) {
+    currentIndex.value -= 1
+    error.value = ''
+  }
+}
+
+async function submitAnswers() {
+  if (submitting.value || !exercise.value) return
+
+  const unanswered = cards.value.some(card => !isAnswered(card))
+
+  if (unanswered) {
+    error.value = 'Bitte beantworte alle Aufgaben, bevor du abschließt.'
+    return
+  }
+
+  submitting.value = true
+  error.value = ''
+
+  try {
+    const formattedAnswers = cards.value.map(card => {
+      let answer
+
+      if (['dropdown', 'gap_fill'].includes(exerciseType.value)) {
+        answer = { ...answers[card.id] }
+      } else if (exerciseType.value === 'sentence_builder') {
+        answer = [...answers[card.id]]
+      } else {
+        answer = String(answers[card.id])
+      }
+
+      return {
+        item_id: card.id,
+        answer,
+      }
+    })
+
+    result.value = await api.saveExerciseResult({
+      exercise_id: exercise.value.id,
+      answers: formattedAnswers,
+    })
+  } catch (err) {
+    error.value =
+      err.response?.data?.detail ||
+      err.response?.data?.error ||
+      'Die Antworten konnten nicht gespeichert werden.'
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(loadExercise)
 </script>
+
+<template>
+  <main class="mx-auto max-w-3xl px-4 py-8">
+    <div v-if="loading" class="py-12 text-center">
+      Übung wird geladen …
+    </div>
+
+    <section v-else-if="error && !exercise" class="rounded-lg border border-red-300 p-5" role="alert">
+      <h1 class="mb-2 text-xl font-bold">Fehler</h1>
+      <p>{{ error }}</p>
+      <button class="mt-4 rounded bg-gray-800 px-4 py-2 text-white" @click="loadExercise">
+        Erneut versuchen
+      </button>
+    </section>
+
+    <section v-else-if="result" class="space-y-6">
+      <div class="text-center">
+        <h1 class="text-2xl font-bold">Übung abgeschlossen</h1>
+        <p class="mt-3 text-lg">Fertig! 🎉</p>
+        <p class="mt-5 text-gray-600">Ergebnis</p>
+        <p class="mt-1 text-4xl font-bold">
+          {{ result.score }} / {{ result.max_score }}
+        </p>
+        <p class="mt-2 text-xl">
+          {{ result.percentage }}% richtig
+        </p>
+      </div>
+
+      <div>
+        <h2 class="mb-4 text-xl font-semibold">Deine Antworten</h2>
+
+        <article v-for="card in cards" :key="card.id" class="mb-4 rounded-lg border p-4">
+          <template v-if="exerciseType === 'gap_fill'">
+            <p class="font-medium leading-8">
+              <template
+                v-for="(segment, index) in getGapFillSegments(card)"
+                :key="index"
+              >
+                <span v-if="segment.type === 'text'">{{ segment.value }}</span>
+                <strong v-else class="mx-1 underline">
+                  {{ answers[card.id]?.[String(segment.gap.id)] || '—' }}
+                </strong>
+              </template>
+            </p>
+          </template>
+
+          <template v-else-if="exerciseType === 'sentence_builder'">
+            <p class="text-lg font-medium">
+              {{ getSentenceText(card) || '—' }}
+            </p>
+            <p
+              v-if="
+                !resultByItemId[String(card.id)]?.is_correct
+                && resultByItemId[String(card.id)]?.correct_answer
+              "
+              class="mt-2 text-gray-700"
+            >
+              Richtige Lösung:
+              <strong>
+                {{ resultByItemId[String(card.id)].correct_answer }}
+              </strong>
+            </p>
+          </template>
+
+          <template v-else-if="exerciseType === 'dropdown'">
+            <p class="mb-3 font-medium">
+              <template v-for="part in card.parts" :key="part.id">
+                <span v-if="part.part_type === 'text'">{{ part.text }}</span>
+                <span v-else>
+                  <strong>
+                    {{ getSelectedOption(card.id, part.id)?.text || '—' }}
+                  </strong>
+                </span>
+              </template>
+            </p>
+          </template>
+
+          <template v-else>
+            <p class="font-medium">{{ getPrompt(card) }}</p>
+            <p class="mt-2">
+              Deine Antwort:
+              <strong>
+                {{
+                  exerciseType === 'multiple_choice'
+                    ? getOptionText(card, answers[card.id])
+                    : answers[card.id]
+                }}
+              </strong>
+            </p>
+          </template>
+
+          <p v-if="resultByItemId[String(card.id)]" class="mt-3 font-semibold">
+            {{
+              resultByItemId[String(card.id)].is_correct
+                ? 'Richtig ✓'
+                : 'Leider falsch ✗'
+            }}
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section v-else-if="exercise" class="space-y-6">
+      <header>
+        <h1 class="text-2xl font-bold">{{ exercise.title }}</h1>
+        <p class="mt-1 text-gray-600">
+          Aufgabe {{ currentIndex + 1 }} von {{ cards.length }}
+        </p>
+      </header>
+
+      <div v-if="error" class="rounded border border-red-300 p-3 text-red-700" role="alert">
+        {{ error }}
+      </div>
+
+      <article v-if="currentCard" class="rounded-lg border p-5">
+        <template v-if="exerciseType === 'gap_fill'">
+          <p class="mb-5 text-lg leading-9">
+            <template
+              v-for="(segment, index) in getGapFillSegments(currentCard)"
+              :key="index"
+            >
+              <span v-if="segment.type === 'text'">{{ segment.value }}</span>
+              <input
+                v-else
+                type="text"
+                :value="answers[currentCard.id]?.[String(segment.gap.id)] ?? ''"
+                class="mx-1 inline-block w-32 rounded border px-2 py-1 text-base"
+                :aria-label="`Antwort für ${segment.gap.placeholder}`"
+                @input="setGapFillAnswer(
+                  currentCard.id,
+                  segment.gap.id,
+                  $event.target.value
+                )"
+              />
+            </template>
+          </p>
+        </template>
+
+        <template v-else-if="exerciseType === 'sentence_builder'">
+          <h2 class="mb-4 text-lg font-medium">
+            Ordne die Wörter zu einem Satz:
+          </h2>
+
+          <div class="mb-5 min-h-14 rounded border bg-gray-50 p-3">
+            <button
+              v-for="(tokenId, index) in answers[currentCard.id]"
+              :key="tokenId"
+              type="button"
+              class="mr-2 mb-2 rounded border bg-white px-3 py-2 hover:bg-red-50"
+              :aria-label="`Wort entfernen: ${currentCard.tokens.find(token => token.id === tokenId)?.text || tokenId}`"
+              @click="removeSentenceToken(currentCard.id, tokenId)"
+            >
+              {{ currentCard.tokens.find(token => token.id === tokenId)?.text }}
+              <span aria-hidden="true">×</span>
+            </button>
+            <span v-if="!answers[currentCard.id]?.length" class="text-gray-500">
+              Wähle die Wörter in der richtigen Reihenfolge.
+            </span>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="token in currentCard.tokens"
+              :key="token.id"
+              type="button"
+              class="rounded border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
+              :disabled="isSentenceTokenSelected(currentCard, token.id)"
+              @click="addSentenceToken(currentCard.id, token.id)"
+            >
+              {{ token.text }}
+            </button>
+          </div>
+        </template>
+
+        <template v-else-if="exerciseType === 'dropdown'">
+          <p class="mb-5 text-lg leading-9">
+            <template v-for="part in currentCard.parts" :key="part.id">
+              <span v-if="part.part_type === 'text'">{{ part.text }}</span>
+
+              <select v-else-if="part.part_type === 'select'" :value="answers[currentCard.id]?.[String(part.id)] ?? ''"
+                class="mx-1 rounded border bg-white px-2 py-1 text-base" :aria-label="`Antwort für Teil ${part.id}`"
+                @change="
+                  setDropdownAnswer(
+                    currentCard.id,
+                    part.id,
+                    $event.target.value,
+                  )
+                  ">
+                <option value="" disabled>Bitte auswählen</option>
+                <option v-for="option in part.options" :key="option.id" :value="String(option.id)">
+                  {{ option.text }}
+                </option>
+              </select>
+            </template>
+          </p>
+        </template>
+
+        <template v-else-if="exerciseType === 'multiple_choice'">
+          <div class="card-scene">
+            <div
+              class="card-inner"
+              :class="{ 'card-flipped': checkedAnswers[currentCard.id] }"
+            >
+              <div class="card-face rounded-lg p-2">
+                <h2 class="mb-5 text-lg font-medium">
+                  {{ getPrompt(currentCard) }}
+                </h2>
+
+                <div class="space-y-3">
+                  <label
+                    v-for="option in currentCard.options"
+                    :key="option.id"
+                    class="flex cursor-pointer items-center gap-3 rounded border p-3 hover:bg-gray-50"
+                    :class="{
+                      'cursor-not-allowed opacity-60':
+                        checkedAnswers[currentCard.id] ||
+                        checkingAnswerId === String(currentCard.id),
+                    }"
+                  >
+                    <input
+                      type="radio"
+                      :name="`answer-${currentCard.id}`"
+                      :value="String(option.id)"
+                      :checked="answers[currentCard.id] === String(option.id)"
+                      :disabled="!!checkedAnswers[currentCard.id] ||
+                        checkingAnswerId === String(currentCard.id)"
+                      @change="selectMultipleChoiceOption(currentCard, option.id)"
+                    />
+                    <span>{{ option.text }}</span>
+                  </label>
+                </div>
+
+                <p v-if="checkingAnswerId === String(currentCard.id)"
+                  class="mt-4 text-sm text-gray-600" role="status">
+                  Antwort wird geprüft …
+                </p>
+              </div>
+
+              <div
+                v-if="checkedAnswers[currentCard.id]"
+                class="card-face card-back rounded-lg border p-5"
+                :class="checkedAnswers[currentCard.id].is_correct
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-red-300 bg-red-50'"
+                aria-live="polite"
+              >
+                <p class="mb-3 text-xl font-semibold">
+                  {{ checkedAnswers[currentCard.id].is_correct
+                    ? 'Richtig!'
+                    : 'Leider falsch.' }}
+                </p>
+
+                <template v-if="!checkedAnswers[currentCard.id].is_correct">
+                  <p class="text-sm text-gray-600">Richtige Antwort:</p>
+                  <p class="mt-1 text-lg font-medium">
+                    {{ checkedAnswers[currentCard.id].correct_answer }}
+                  </p>
+                </template>
+
+                <p v-else class="text-sm">
+                  Gut gemacht — deine Antwort ist richtig.
+                </p>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template v-else>
+          <h2 class="mb-5 text-lg font-medium">
+            {{ getPrompt(currentCard) }}
+          </h2>
+
+          <div class="space-y-3">
+            <label v-for="option in currentCard.options" :key="option.id"
+              class="flex cursor-pointer items-center gap-3 rounded border p-3 hover:bg-gray-50">
+              <input v-model="answers[currentCard.id]" type="radio" :name="`answer-${currentCard.id}`"
+                :value="String(option.id)" />
+              <span>{{ option.text }}</span>
+            </label>
+          </div>
+        </template>
+      </article>
+
+      <div class="flex flex-wrap justify-between gap-3">
+        <button class="rounded border px-4 py-2 disabled:opacity-40" :disabled="currentIndex === 0 || submitting"
+          @click="previousQuestion">
+          Zurück
+        </button>
+
+        <button v-if="!isLastQuestion" class="rounded bg-gray-800 px-4 py-2 text-white disabled:opacity-40"
+          :disabled="submitting" @click="nextQuestion">
+          Nächste Aufgabe
+        </button>
+
+        <button v-else class="rounded bg-green-700 px-4 py-2 text-white disabled:opacity-40" :disabled="submitting"
+          @click="submitAnswers">
+          {{ submitting ? 'Wird geprüft …' : 'Übung abschließen' }}
+        </button>
+      </div>
+    </section>
+  </main>
+</template>
+
+
+<style scoped>
+.card-scene {
+  perspective: 1000px;
+}
+
+.card-inner {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 500ms ease;
+}
+
+.card-inner > .card-face {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+}
+
+.card-inner > .card-back {
+  transform: rotateY(180deg);
+}
+
+.card-inner.card-flipped {
+  transform: rotateY(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-inner {
+    transition: none;
+  }
+}
+</style>
