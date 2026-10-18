@@ -45,9 +45,11 @@ const isLastQuestion = computed(
 
 const resultByItemId = computed(() => {
   const map = {}
+
   for (const item of result.value?.results || []) {
     map[String(item.item_id)] = item
   }
+
   return map
 })
 
@@ -59,6 +61,7 @@ function getSelectedOption(itemId, partId) {
   const item = (exercise.value?.dropdown_items || []).find(
     entry => String(entry.id) === String(itemId),
   )
+
   const part = item?.parts?.find(
     entry => String(entry.id) === String(partId),
   )
@@ -191,6 +194,7 @@ function isAnswered(card) {
   if (exerciseType.value === 'sentence_builder') {
     const tokens = card.tokens || []
     const selected = answers[card.id] || []
+
     return tokens.length > 0 && selected.length === tokens.length
   }
 
@@ -207,6 +211,7 @@ function isAnswered(card) {
     const selectableParts = (card.parts || []).filter(
       part => part.part_type === 'select',
     )
+
     return selectableParts.length > 0 &&
       selectableParts.every(part => {
         const value = answers[card.id]?.[String(part.id)]
@@ -215,6 +220,7 @@ function isAnswered(card) {
   }
 
   const value = answers[card.id]
+
   return value !== undefined &&
     value !== null &&
     value !== '' &&
@@ -350,10 +356,17 @@ onMounted(loadExercise)
       Übung wird geladen …
     </div>
 
-    <section v-else-if="error && !exercise" class="rounded-lg border border-red-300 p-5" role="alert">
+    <section
+      v-else-if="error && !exercise"
+      class="rounded-lg border border-red-300 p-5"
+      role="alert"
+    >
       <h1 class="mb-2 text-xl font-bold">Fehler</h1>
       <p>{{ error }}</p>
-      <button class="mt-4 rounded bg-gray-800 px-4 py-2 text-white" @click="loadExercise">
+      <button
+        class="mt-4 rounded bg-gray-800 px-4 py-2 text-white"
+        @click="loadExercise"
+      >
         Erneut versuchen
       </button>
     </section>
@@ -374,14 +387,27 @@ onMounted(loadExercise)
       <div>
         <h2 class="mb-4 text-xl font-semibold">Deine Antworten</h2>
 
-        <article v-for="card in cards" :key="card.id" class="mb-4 rounded-lg border p-4">
+        <article
+          v-for="card in cards"
+          :key="card.id"
+          class="mb-4 rounded-xl border p-4 shadow-sm transition-colors duration-200 motion-reduce:transition-none"
+          :class="
+            resultByItemId[String(card.id)]?.is_correct === true
+              ? 'border-emerald-300 bg-emerald-50'
+              : resultByItemId[String(card.id)]?.is_correct === false
+                ? 'border-red-300 bg-red-50'
+                : 'border-slate-200 bg-white'
+          "
+        >
           <template v-if="exerciseType === 'gap_fill'">
             <p class="font-medium leading-8">
               <template
                 v-for="(segment, index) in getGapFillSegments(card)"
                 :key="index"
               >
-                <span v-if="segment.type === 'text'">{{ segment.value }}</span>
+                <span v-if="segment.type === 'text'">
+                  {{ segment.value }}
+                </span>
                 <strong v-else class="mx-1 underline">
                   {{ answers[card.id]?.[String(segment.gap.id)] || '—' }}
                 </strong>
@@ -393,24 +419,29 @@ onMounted(loadExercise)
             <p class="text-lg font-medium">
               {{ getSentenceText(card) || '—' }}
             </p>
-            <p
+
+            <div
               v-if="
-                !resultByItemId[String(card.id)]?.is_correct
+                resultByItemId[String(card.id)]?.is_correct === false
                 && resultByItemId[String(card.id)]?.correct_answer
               "
-              class="mt-2 text-gray-700"
+              class="mt-3 rounded-lg border border-emerald-200 bg-white/80 p-3"
             >
-              Richtige Lösung:
-              <strong>
+              <p class="text-sm font-medium text-emerald-700">
+                Richtige Lösung
+              </p>
+              <p class="mt-1 font-semibold text-emerald-800">
                 {{ resultByItemId[String(card.id)].correct_answer }}
-              </strong>
-            </p>
+              </p>
+            </div>
           </template>
 
           <template v-else-if="exerciseType === 'dropdown'">
             <p class="mb-3 font-medium">
               <template v-for="part in card.parts" :key="part.id">
-                <span v-if="part.part_type === 'text'">{{ part.text }}</span>
+                <span v-if="part.part_type === 'text'">
+                  {{ part.text }}
+                </span>
                 <span v-else>
                   <strong>
                     {{ getSelectedOption(card.id, part.id)?.text || '—' }}
@@ -434,11 +465,19 @@ onMounted(loadExercise)
             </p>
           </template>
 
-          <p v-if="resultByItemId[String(card.id)]" class="mt-3 font-semibold">
+          <p
+            v-if="resultByItemId[String(card.id)]"
+            class="mt-4 border-t border-current/10 pt-3 font-bold"
+            :class="
+              resultByItemId[String(card.id)].is_correct
+                ? 'text-emerald-700'
+                : 'text-red-700'
+            "
+          >
             {{
               resultByItemId[String(card.id)].is_correct
-                ? 'Richtig ✓'
-                : 'Leider falsch ✗'
+                ? '✓ Richtig'
+                : '✗ Leider falsch'
             }}
           </p>
         </article>
@@ -453,7 +492,11 @@ onMounted(loadExercise)
         </p>
       </header>
 
-      <div v-if="error" class="rounded border border-red-300 p-3 text-red-700" role="alert">
+      <div
+        v-if="error"
+        class="rounded border border-red-300 p-3 text-red-700"
+        role="alert"
+      >
         {{ error }}
       </div>
 
@@ -464,18 +507,22 @@ onMounted(loadExercise)
               v-for="(segment, index) in getGapFillSegments(currentCard)"
               :key="index"
             >
-              <span v-if="segment.type === 'text'">{{ segment.value }}</span>
+              <span v-if="segment.type === 'text'">
+                {{ segment.value }}
+              </span>
               <input
                 v-else
                 type="text"
                 :value="answers[currentCard.id]?.[String(segment.gap.id)] ?? ''"
                 class="mx-1 inline-block w-32 rounded border px-2 py-1 text-base"
                 :aria-label="`Antwort für ${segment.gap.placeholder}`"
-                @input="setGapFillAnswer(
-                  currentCard.id,
-                  segment.gap.id,
-                  $event.target.value
-                )"
+                @input="
+                  setGapFillAnswer(
+                    currentCard.id,
+                    segment.gap.id,
+                    $event.target.value
+                  )
+                "
               />
             </template>
           </p>
@@ -488,7 +535,7 @@ onMounted(loadExercise)
 
           <div class="mb-5 min-h-14 rounded border bg-gray-50 p-3">
             <button
-              v-for="(tokenId, index) in answers[currentCard.id]"
+              v-for="tokenId in answers[currentCard.id]"
               :key="tokenId"
               type="button"
               class="mr-2 mb-2 rounded border bg-white px-3 py-2 hover:bg-red-50"
@@ -498,7 +545,11 @@ onMounted(loadExercise)
               {{ currentCard.tokens.find(token => token.id === tokenId)?.text }}
               <span aria-hidden="true">×</span>
             </button>
-            <span v-if="!answers[currentCard.id]?.length" class="text-gray-500">
+
+            <span
+              v-if="!answers[currentCard.id]?.length"
+              class="text-gray-500"
+            >
               Wähle die Wörter in der richtigen Reihenfolge.
             </span>
           </div>
@@ -520,19 +571,29 @@ onMounted(loadExercise)
         <template v-else-if="exerciseType === 'dropdown'">
           <p class="mb-5 text-lg leading-9">
             <template v-for="part in currentCard.parts" :key="part.id">
-              <span v-if="part.part_type === 'text'">{{ part.text }}</span>
+              <span v-if="part.part_type === 'text'">
+                {{ part.text }}
+              </span>
 
-              <select v-else-if="part.part_type === 'select'" :value="answers[currentCard.id]?.[String(part.id)] ?? ''"
-                class="mx-1 rounded border bg-white px-2 py-1 text-base" :aria-label="`Antwort für Teil ${part.id}`"
+              <select
+                v-else-if="part.part_type === 'select'"
+                :value="answers[currentCard.id]?.[String(part.id)] ?? ''"
+                class="mx-1 rounded border bg-white px-2 py-1 text-base"
+                :aria-label="`Antwort für Teil ${part.id}`"
                 @change="
                   setDropdownAnswer(
                     currentCard.id,
                     part.id,
                     $event.target.value,
                   )
-                  ">
+                "
+              >
                 <option value="" disabled>Bitte auswählen</option>
-                <option v-for="option in part.options" :key="option.id" :value="String(option.id)">
+                <option
+                  v-for="option in part.options"
+                  :key="option.id"
+                  :value="String(option.id)"
+                >
                   {{ option.text }}
                 </option>
               </select>
@@ -567,16 +628,23 @@ onMounted(loadExercise)
                       :name="`answer-${currentCard.id}`"
                       :value="String(option.id)"
                       :checked="answers[currentCard.id] === String(option.id)"
-                      :disabled="!!checkedAnswers[currentCard.id] ||
-                        checkingAnswerId === String(currentCard.id)"
-                      @change="selectMultipleChoiceOption(currentCard, option.id)"
+                      :disabled="
+                        !!checkedAnswers[currentCard.id] ||
+                        checkingAnswerId === String(currentCard.id)
+                      "
+                      @change="
+                        selectMultipleChoiceOption(currentCard, option.id)
+                      "
                     />
                     <span>{{ option.text }}</span>
                   </label>
                 </div>
 
-                <p v-if="checkingAnswerId === String(currentCard.id)"
-                  class="mt-4 text-sm text-gray-600" role="status">
+                <p
+                  v-if="checkingAnswerId === String(currentCard.id)"
+                  class="mt-4 text-sm text-gray-600"
+                  role="status"
+                >
                   Antwort wird geprüft …
                 </p>
               </div>
@@ -584,15 +652,19 @@ onMounted(loadExercise)
               <div
                 v-if="checkedAnswers[currentCard.id]"
                 class="card-face card-back rounded-lg border p-5"
-                :class="checkedAnswers[currentCard.id].is_correct
-                  ? 'border-green-300 bg-green-50'
-                  : 'border-red-300 bg-red-50'"
+                :class="
+                  checkedAnswers[currentCard.id].is_correct
+                    ? 'border-green-300 bg-green-50'
+                    : 'border-red-300 bg-red-50'
+                "
                 aria-live="polite"
               >
                 <p class="mb-3 text-xl font-semibold">
-                  {{ checkedAnswers[currentCard.id].is_correct
-                    ? 'Richtig!'
-                    : 'Leider falsch.' }}
+                  {{
+                    checkedAnswers[currentCard.id].is_correct
+                      ? 'Richtig!'
+                      : 'Leider falsch.'
+                  }}
                 </p>
 
                 <template v-if="!checkedAnswers[currentCard.id].is_correct">
@@ -616,10 +688,17 @@ onMounted(loadExercise)
           </h2>
 
           <div class="space-y-3">
-            <label v-for="option in currentCard.options" :key="option.id"
-              class="flex cursor-pointer items-center gap-3 rounded border p-3 hover:bg-gray-50">
-              <input v-model="answers[currentCard.id]" type="radio" :name="`answer-${currentCard.id}`"
-                :value="String(option.id)" />
+            <label
+              v-for="option in currentCard.options"
+              :key="option.id"
+              class="flex cursor-pointer items-center gap-3 rounded border p-3 hover:bg-gray-50"
+            >
+              <input
+                v-model="answers[currentCard.id]"
+                type="radio"
+                :name="`answer-${currentCard.id}`"
+                :value="String(option.id)"
+              />
               <span>{{ option.text }}</span>
             </label>
           </div>
@@ -627,25 +706,35 @@ onMounted(loadExercise)
       </article>
 
       <div class="flex flex-wrap justify-between gap-3">
-        <button class="rounded border px-4 py-2 disabled:opacity-40" :disabled="currentIndex === 0 || submitting"
-          @click="previousQuestion">
+        <button
+          class="rounded border px-4 py-2 disabled:opacity-40"
+          :disabled="currentIndex === 0 || submitting"
+          @click="previousQuestion"
+        >
           Zurück
         </button>
 
-        <button v-if="!isLastQuestion" class="rounded bg-gray-800 px-4 py-2 text-white disabled:opacity-40"
-          :disabled="submitting" @click="nextQuestion">
+        <button
+          v-if="!isLastQuestion"
+          class="rounded bg-gray-800 px-4 py-2 text-white disabled:opacity-40"
+          :disabled="submitting"
+          @click="nextQuestion"
+        >
           Nächste Aufgabe
         </button>
 
-        <button v-else class="rounded bg-green-700 px-4 py-2 text-white disabled:opacity-40" :disabled="submitting"
-          @click="submitAnswers">
+        <button
+          v-else
+          class="rounded bg-green-700 px-4 py-2 text-white disabled:opacity-40"
+          :disabled="submitting"
+          @click="submitAnswers"
+        >
           {{ submitting ? 'Wird geprüft …' : 'Übung abschließen' }}
         </button>
       </div>
     </section>
   </main>
 </template>
-
 
 <style scoped>
 .card-scene {

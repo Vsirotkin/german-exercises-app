@@ -50,7 +50,7 @@
     <!-- Список упражнений -->
     <div v-else class="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
       <article v-for="exercise in exercises" :key="exercise.id"
-        class="group relative flex min-h-[310px] flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition duration-200"
+        class="group relative flex min-h-[310px] flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-[transform,box-shadow,border-color] duration-300 ease-out motion-reduce:transition-none"
         :class="getCardClass(exercise)">
         <!-- Perfekt badge -->
         <div v-if="exercise.status === 'mastered'"
@@ -182,15 +182,16 @@ const getCardClass = (exercise) => {
   }
 
   const classes = {
-    mastered: 'border-amber-300 shadow-amber-100',
-    completed: 'border-emerald-200',
-    review_recommended: 'border-amber-200',
-    needs_review: 'border-red-200',
-    not_started: 'border-slate-200 hover:-translate-y-1 hover:shadow-md',
+    mastered: 'border-amber-300 shadow-amber-100 hover:-translate-y-1 hover:shadow-lg',
+    completed: 'border-emerald-200 hover:-translate-y-1 hover:shadow-lg',
+    review_recommended: 'border-amber-200 hover:-translate-y-1 hover:shadow-lg',
+    needs_review: 'border-red-200 hover:-translate-y-1 hover:shadow-lg',
+    not_started: 'border-slate-200 hover:-translate-y-1 hover:shadow-lg',
   }
 
   return classes[exercise.status] || classes.not_started
 }
+
 
 const getStatusLabel = (status) => {
   const labels = {
