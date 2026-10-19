@@ -582,3 +582,193 @@ class ExerciseImportValidateAPITest(BaseAPITestCase):
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+
+class StudentAnalyticsPermissionsAPITest(BaseAPITestCase):
+    """
+    Access control tests for student progress, history and admin analytics.
+    """
+
+    def create_other_student_with_result(self):
+        # Deliberately create an unlinked Student first. This makes the
+        # other Student.id differ from the other Django User.id and verifies
+        # the URL contract uses Student.id.
+        Student.objects.create(
+            user=None,
+            first_name="Unlinked",
+            last_name="Profile",
+            email="unlinked@example.com",
+            level="A1",
+        )
+
+        other_user = User.objects.create_user(
+            username="otherstudent",
+            password="otherpassword123",
+            email="other@example.com",
+        )
+        other_student = Student.objects.create(
+            user=other_user,
+            first_name="Other",
+            last_name="Student",
+            email="other@example.com",
+            level="B1",
+        )
+        ExerciseResult.objects.create(
+            student=other_student,
+            exercise=self.exercise_2,
+            score=1,
+            max_score=2,
+            percentage=50.0,
+        )
+
+        self.assertNotEqual(other_student.id, other_user.id)
+        return other_student
+
+    def test_current_user_returns_student_profile_id(self):
+        self.authenticate()
+
+        response = self.client.get("/api/me/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["role"], "student")
+        self.assertEqual(response.data["student_id"], self.student.id)
+
+    def test_unauthenticated_requests_are_rejected(self):
+        progress_response = self.client.get(
+            f"/api/results/student/{self.student.id}/progress/",
+        )
+        history_response = self.client.get(
+            f"/api/results/student/{self.student.id}/",
+        )
+        list_response = self.client.get("/api/admin/students/")
+
+        self.assertEqual(
+            progress_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+        self.assertEqual(
+            history_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+        self.assertEqual(
+            list_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_student_can_read_own_progress_and_history(self):
+        ExerciseResult.objects.create(
+            student=self.student,
+            exercise=self.exercise_1,
+            score=1,
+            max_score=1,
+            percentage=100.0,
+        )
+        self.authenticate()
+
+        progress_response = self.client.get(
+            f"/api/results/student/{self.student.id}/progress/",
+        )
+        history_response = self.client.get(
+            f"/api/results/student/{self.student.id}/",
+        )
+
+        self.assertEqual(
+            progress_response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(progress_response.data["total_exercises"], 1)
+        self.assertEqual(progress_response.data["average_score"], 100.0)
+        self.assertEqual(progress_response.data["best_score"], 100.0)
+
+        self.assertEqual(
+            history_response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(len(history_response.data), 1)
+        self.assertEqual(
+            history_response.data[0]["exercise_title"],
+            self.exercise_1.title,
+        )
+
+    def test_student_cannot_read_another_students_progress_or_history(self):
+        other_student = self.create_other_student_with_result()
+        self.authenticate()
+
+        progress_response = self.client.get(
+            f"/api/results/student/{other_student.id}/progress/",
+        )
+        history_response = self.client.get(
+            f"/api/results/student/{other_student.id}/",
+        )
+
+        self.assertEqual(
+            progress_response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertEqual(
+            history_response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertEqual(progress_response.data, {"detail": "Not found."})
+        self.assertEqual(history_response.data, {"detail": "Not found."})
+
+    def test_student_cannot_access_admin_student_list(self):
+        self.authenticate()
+
+        response = self.client.get("/api/admin/students/")
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_admin_can_read_any_students_progress_history_and_list(self):
+        other_student = self.create_other_student_with_result()
+
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+        self.authenticate()
+
+        progress_response = self.client.get(
+            f"/api/results/student/{other_student.id}/progress/",
+        )
+        history_response = self.client.get(
+            f"/api/results/student/{other_student.id}/",
+        )
+        list_response = self.client.get("/api/admin/students/")
+
+        self.assertEqual(
+            progress_response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(progress_response.data["total_exercises"], 1)
+        self.assertEqual(progress_response.data["average_score"], 50.0)
+        self.assertEqual(progress_response.data["best_score"], 50.0)
+
+        self.assertEqual(
+            history_response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(len(history_response.data), 1)
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        students = list_response.data
+        self.assertEqual(len(students), 3)
+
+        other_row = next(
+            student
+            for student in students
+            if student["id"] == other_student.id
+        )
+        self.assertEqual(other_row["total_exercises"], 1)
+        self.assertEqual(other_row["average_score"], 50.0)
+        self.assertEqual(other_row["best_score"], 50.0)
+
+    def test_superuser_can_access_admin_list_without_staff_flag(self):
+        self.user.is_staff = False
+        self.user.is_superuser = True
+        self.user.save(update_fields=["is_staff", "is_superuser"])
+        self.authenticate()
+
+        response = self.client.get("/api/admin/students/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)

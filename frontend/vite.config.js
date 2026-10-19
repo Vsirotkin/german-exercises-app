@@ -16,24 +16,29 @@ export default defineConfig({
 
   server: {
     proxy: {
-      '/admin': {
-        target: 'http://localhost:8000',
+      // Django Admin: только пути /admin/, не /admin-dashboard.
+      '/static/': {
+        target: 'http://backend:8000',
+        changeOrigin: true,
+      },
+      '/admin/': {
+        target: 'http://backend:8000',
         changeOrigin: true,
       },
       '/recommendations': {
-        target: 'http://localhost:8000',
+        target: 'http://backend:8000',
         changeOrigin: true,
       },
       '/auth': {
-        target: 'http://localhost:8000',
+        target: 'http://backend:8000',
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://backend:8000',
         changeOrigin: true,
       },
       '/results': {
-        target: 'http://localhost:8000',
+        target: 'http://backend:8000',
         changeOrigin: true,
       },
     },

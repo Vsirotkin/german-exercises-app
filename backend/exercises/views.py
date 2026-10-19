@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Avg, Max
+from django.db.models import Avg, Count, Max
 from django.shortcuts import get_object_or_404
 
 from rest_framework import status
@@ -214,22 +214,57 @@ class StudentRecommendationsView(APIView):
         )
 
 
+
 # ============================================================
 # 4. Текущий пользователь
 # ============================================================
+
+
+def is_admin_user(user):
+    """Проверяет административные права в соответствии с /api/me/."""
+    return bool(
+        user
+        and user.is_authenticated
+        and (user.is_staff or user.is_superuser)
+    )
+
+
+def get_accessible_student(user, student_id):
+    """
+    Возвращает профиль по Student.id, если пользователь имеет право
+    просматривать его статистику.
+
+    Ученику доступен только профиль, связанный с его Django User.
+    Администратору доступны все профили, включая ещё не привязанные
+    к учётной записи.
+    """
+    student = Student.objects.filter(pk=student_id).first()
+
+    if student is None:
+        return None
+
+    if is_admin_user(user) or student.user_id == user.id:
+        return student
+
+    return None
 
 
 class CurrentUserView(APIView):
     """
     GET /api/me/
 
-    Возвращает информацию о текущем пользователе.
+    Возвращает текущего Django-пользователя и ID его профиля Student.
+    student_id равен null, если профиль не связан с пользователем.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
+        student_id = Student.objects.filter(user=user).values_list(
+            "id",
+            flat=True,
+        ).first()
 
         return Response(
             {
@@ -240,11 +275,15 @@ class CurrentUserView(APIView):
                 "email": user.email,
                 "is_staff": user.is_staff,
                 "is_superuser": user.is_superuser,
-                "role": ("admin" if user.is_staff or user.is_superuser else "student"),
+                "role": (
+                    "admin"
+                    if is_admin_user(user)
+                    else "student"
+                ),
+                "student_id": student_id,
             },
             status=status.HTTP_200_OK,
         )
-
 
 # ============================================================
 # 5. Список упражнений
@@ -293,8 +332,9 @@ def get_student_for_user(user):
         return None
 
 
+
 # ============================================================
-# 7. Прогресс студента
+# 7. Прогресс ученика
 # ============================================================
 
 
@@ -302,56 +342,29 @@ class StudentProgressView(APIView):
     """
     GET /api/results/student/<student_id>/progress/
 
-    В текущем frontend <student_id> фактически является user_id.
-    Сохраняем существующий URL-контракт, но работаем с новой моделью
-    ExerciseResult.
+    student_id здесь означает Student.id, а не Django User.id.
 
-    Возвращает:
-
-    {
-        "total_exercises": 10,
-        "average_score": 82.5,
-        "best_score": 100.0,
-        "last_activity": "..."
-    }
+    Администратор может просматривать статистику любого профиля.
+    Ученик может просматривать только собственную статистику.
+    Для отсутствующего и недоступного профиля возвращается одинаковый 404.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, student_id):
-        try:
-            student = Student.objects.get(user_id=student_id)
-        except Student.DoesNotExist:
+        student = get_accessible_student(request.user, student_id)
+
+        if student is None:
             return Response(
-                {
-                    "total_exercises": 0,
-                    "average_score": 0,
-                    "best_score": 0,
-                    "last_activity": None,
-                },
-                status=status.HTTP_200_OK,
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        results = ExerciseResult.objects.filter(
-            student=student,
-        )
-
-        if not results.exists():
-            return Response(
-                {
-                    "total_exercises": 0,
-                    "average_score": 0,
-                    "best_score": 0,
-                    "last_activity": None,
-                },
-                status=status.HTTP_200_OK,
-            )
-
+        results = ExerciseResult.objects.filter(student=student)
         statistics = results.aggregate(
             average_score=Avg("percentage"),
             best_score=Max("percentage"),
         )
-
         last_result = results.order_by("-completed_at").first()
 
         return Response(
@@ -365,14 +378,18 @@ class StudentProgressView(APIView):
                     statistics["best_score"] or 0,
                     1,
                 ),
-                "last_activity": last_result.completed_at,
+                "last_activity": (
+                    last_result.completed_at
+                    if last_result
+                    else None
+                ),
             },
             status=status.HTTP_200_OK,
         )
 
 
 # ============================================================
-# 8. История студента
+# 8. История ученика
 # ============================================================
 
 
@@ -380,18 +397,21 @@ class StudentHistoryView(APIView):
     """
     GET /api/results/student/<student_id>/
 
-    Возвращает последние результаты студента.
+    student_id означает Student.id.
+
+    Администратор имеет доступ к истории любого профиля.
+    Ученик имеет доступ только к собственной истории.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, student_id):
-        try:
-            student = Student.objects.get(user_id=student_id)
-        except Student.DoesNotExist:
+        student = get_accessible_student(request.user, student_id)
+
+        if student is None:
             return Response(
-                [],
-                status=status.HTTP_200_OK,
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         results = (
@@ -400,28 +420,92 @@ class StudentHistoryView(APIView):
             .order_by("-completed_at")[:20]
         )
 
-        data = []
+        data = [
+            {
+                "id": result.id,
+                "exercise": (
+                    result.exercise.id
+                    if result.exercise
+                    else None
+                ),
+                "exercise_title": (
+                    result.exercise.title
+                    if result.exercise
+                    else "Unknown"
+                ),
+                "score": result.score,
+                "max_score": result.max_score,
+                "percentage": result.percentage,
+                "completed_at": result.completed_at,
+            }
+            for result in results
+        ]
 
-        for result in results:
-            data.append(
+        return Response(data, status=status.HTTP_200_OK)
+
+
+# ============================================================
+# 9. Административный список учеников и сводная статистика
+# ============================================================
+
+
+class AdminStudentListView(APIView):
+    """
+    GET /api/admin/students/
+
+    Только администратор может получить список профилей Student.
+
+    id в каждой записи — это Student.id, используемый в endpoints
+    прогресса и истории. Профили без выполненных упражнений тоже
+    возвращаются с нулевыми показателями.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not is_admin_user(request.user):
+            return Response(
                 {
-                    "id": result.id,
-                    "exercise": (result.exercise.id if result.exercise else None),
-                    "exercise_title": (
-                        result.exercise.title if result.exercise else "Unknown"
-                    ),
-                    "score": result.score,
-                    "max_score": result.max_score,
-                    "percentage": result.percentage,
-                    "completed_at": result.completed_at,
-                }
+                    "detail": (
+                        "You do not have permission to view this resource."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-        return Response(
-            data,
-            status=status.HTTP_200_OK,
+        students = (
+            Student.objects.annotate(
+                total_exercises=Count("results"),
+                average_score=Avg("results__percentage"),
+                best_score=Max("results__percentage"),
+                last_activity=Max("results__completed_at"),
+            )
+            .order_by("last_name", "first_name", "id")
         )
 
+        data = [
+            {
+                "id": student.id,
+                "first_name": student.first_name,
+                "last_name": student.last_name,
+                "email": student.email,
+                "level": student.level,
+                "created_at": student.created_at,
+                "total_exercises": student.total_exercises,
+                "average_score": round(
+                    student.average_score or 0,
+                    1,
+                ),
+                "best_score": round(
+                    student.best_score or 0,
+                    1,
+                ),
+                "last_activity": student.last_activity,
+            }
+            for student in students
+        ]
+
+        return Response(data, status=status.HTTP_200_OK)
 
 # ============================================================
 # 9. Проверка ответов

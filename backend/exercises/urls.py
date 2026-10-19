@@ -8,6 +8,7 @@ from .views import (
     ExerciseImportView,
     ExerciseListView,
     ExerciseResultView,
+    AdminStudentListView,
     StudentHistoryView,
     StudentProgressView,
     StudentRecommendationsView,
@@ -71,6 +72,11 @@ urlpatterns = [
     # --------------------------------------------------------
     # Student progress / history
     # --------------------------------------------------------
+    path(
+        "admin/students/",
+        AdminStudentListView.as_view(),
+        name="admin-student-list",
+    ),
     path(
         "results/student/<int:student_id>/progress/",
         StudentProgressView.as_view(),
