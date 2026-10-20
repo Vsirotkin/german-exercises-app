@@ -524,3 +524,82 @@ class StudentTopicProgress(models.Model):
                 name="unique_student_topic_progress",
             ),
         ]
+
+
+class TeacherRecommendation(models.Model):
+    PRIORITY_CHOICES = [
+        ("high", "Высокий"),
+        ("normal", "Обычный"),
+        ("low", "Низкий"),
+    ]
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="teacher_recommendations",
+        verbose_name="Ученик",
+    )
+    title = models.CharField(
+        max_length=200,
+        verbose_name="Заголовок",
+    )
+    message = models.TextField(
+        verbose_name="Текст рекомендации",
+    )
+    reason = models.TextField(
+        blank=True,
+        null=True,
+        default=None,
+        verbose_name="Причина рекомендации",
+        help_text="Необязательное объяснение, почему назначена рекомендация.",
+    )
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="teacher_recommendations",
+        verbose_name="Тема",
+    )
+    exercise = models.ForeignKey(
+        Exercise,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="teacher_recommendations",
+        verbose_name="Упражнение",
+    )
+    priority = models.CharField(
+        max_length=10,
+        choices=PRIORITY_CHOICES,
+        default="normal",
+        verbose_name="Приоритет",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активна",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_teacher_recommendations",
+        verbose_name="Создал",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Создана",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Обновлена",
+    )
+
+    def __str__(self):
+        return f"{self.title} — {self.student}"
+
+    class Meta:
+        verbose_name = "Рекомендация учителя"
+        verbose_name_plural = "Рекомендации учителя"
+        ordering = ["-created_at"]

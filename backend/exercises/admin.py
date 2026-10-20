@@ -16,6 +16,7 @@ from .models import (
     SentenceBuilderToken,
     ExerciseResult,
     StudentTopicProgress,
+    TeacherRecommendation,
 )
 
 # ============================================================
@@ -375,3 +376,100 @@ class StudentTopicProgressAdmin(admin.ModelAdmin):
         "topic__name",
     )
     readonly_fields = ("last_practiced",)
+
+
+# ============================================================
+# Teacher Recommendation
+# ============================================================
+
+
+@admin.register(TeacherRecommendation)
+class TeacherRecommendationAdmin(admin.ModelAdmin):
+    list_display = (
+        "student",
+        "title",
+        "priority",
+        "is_active",
+        "topic",
+        "exercise",
+        "created_by",
+        "created_at",
+    )
+    list_filter = (
+        "is_active",
+        "priority",
+        "topic",
+        "exercise",
+    )
+    search_fields = (
+        "student__first_name",
+        "student__last_name",
+        "student__email",
+        "title",
+        "message",
+        "reason",
+        "topic__name",
+        "exercise__title",
+        "created_by__username",
+    )
+    ordering = ("-created_at",)
+    date_hierarchy = "created_at"
+    list_select_related = (
+        "student",
+        "topic",
+        "exercise",
+        "created_by",
+    )
+    readonly_fields = (
+        "created_by",
+        "created_at",
+        "updated_at",
+    )
+
+    fieldsets = (
+        (
+            "Рекомендация",
+            {
+                "fields": (
+                    "student",
+                    "title",
+                    "message",
+                    "reason",
+                )
+            },
+        ),
+        (
+            "Связанные материалы",
+            {
+                "fields": (
+                    "topic",
+                    "exercise",
+                )
+            },
+        ),
+        (
+            "Настройки",
+            {
+                "fields": (
+                    "priority",
+                    "is_active",
+                )
+            },
+        ),
+        (
+            "Служебная информация",
+            {
+                "fields": (
+                    "created_by",
+                    "created_at",
+                    "updated_at",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
