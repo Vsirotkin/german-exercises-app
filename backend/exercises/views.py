@@ -2,6 +2,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Avg, Count, Max
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.generics import ListAPIView
@@ -30,6 +31,12 @@ from .services.exercise_import import (
 from .services.evaluator import (
     EvaluationError,
     evaluate_answers,
+)
+
+from .services.recommendations import (
+    DEFAULT_LIMIT,
+    MAX_LIMIT,
+    build_automatic_recommendations,
 )
 
 # ============================================================
@@ -213,6 +220,75 @@ class StudentRecommendationsView(APIView):
             status=status.HTTP_200_OK,
         )
 
+
+
+class RecommendationsView(APIView):
+    """
+    GET /api/recommendations/
+
+    Returns automatic recommendations for the authenticated student's
+    own profile. Teacher-created recommendations will be merged here
+    in a later implementation step.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        raw_limit = request.query_params.get("limit")
+        limit = DEFAULT_LIMIT
+
+        if raw_limit is not None:
+            try:
+                limit = int(raw_limit)
+            except (TypeError, ValueError):
+                return Response(
+                    {
+                        "error": {
+                            "code": "INVALID_LIMIT",
+                            "message": "limit must be a positive integer.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if limit < 1:
+                return Response(
+                    {
+                        "error": {
+                            "code": "INVALID_LIMIT",
+                            "message": "limit must be at least 1.",
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            limit = min(limit, MAX_LIMIT)
+
+        student = get_student_for_user(request.user)
+        if student is None:
+            return Response(
+                {
+                    "error": {
+                        "code": "STUDENT_PROFILE_NOT_FOUND",
+                        "message": (
+                            "Student profile was not found "
+                            "for the current user."
+                        ),
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "generated_at": timezone.now(),
+                "recommendations": build_automatic_recommendations(
+                    student,
+                    limit=limit,
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # ============================================================

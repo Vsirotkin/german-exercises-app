@@ -589,9 +589,7 @@ class StudentAnalyticsPermissionsAPITest(BaseAPITestCase):
     """
 
     def create_other_student_with_result(self):
-        # Deliberately create an unlinked Student first. This makes the
-        # other Student.id differ from the other Django User.id and verifies
-        # the URL contract uses Student.id.
+        # Preserve an unlinked profile: the admin list must include it.
         Student.objects.create(
             user=None,
             first_name="Unlinked",
@@ -605,13 +603,22 @@ class StudentAnalyticsPermissionsAPITest(BaseAPITestCase):
             password="otherpassword123",
             email="other@example.com",
         )
-        other_student = Student.objects.create(
-            user=other_user,
-            first_name="Other",
-            last_name="Student",
-            email="other@example.com",
-            level="B1",
-        )
+
+        # User and Student IDs come from independent sequences.
+        # If they coincide, delete the candidate and consume the next
+        # Student ID, while keeping the total number of profiles stable.
+        while True:
+            other_student = Student.objects.create(
+                user=other_user,
+                first_name="Other",
+                last_name="Student",
+                email="other@example.com",
+                level="B1",
+            )
+            if other_student.id != other_user.id:
+                break
+            other_student.delete()
+
         ExerciseResult.objects.create(
             student=other_student,
             exercise=self.exercise_2,
@@ -772,3 +779,221 @@ class StudentAnalyticsPermissionsAPITest(BaseAPITestCase):
         response = self.client.get("/api/admin/students/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class AutomaticRecommendationsAPITest(BaseAPITestCase):
+    endpoint = "/api/recommendations/"
+
+    def create_result(self, exercise, percentage):
+        return ExerciseResult.objects.create(
+            student=self.student,
+            exercise=exercise,
+            score=percentage,
+            max_score=100,
+            percentage=percentage,
+            details={},
+        )
+
+    def test_endpoint_requires_authentication(self):
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_no_history_returns_recommendation_contract(self):
+        self.authenticate()
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("generated_at", response.data)
+        self.assertIn("recommendations", response.data)
+        self.assertEqual(len(response.data["recommendations"]), 1)
+
+        recommendation = response.data["recommendations"][0]
+        self.assertEqual(recommendation["source"], "system")
+        self.assertEqual(recommendation["kind"], "start_learning")
+        self.assertEqual(recommendation["priority"], "low")
+        self.assertEqual(
+            recommendation["exercise"]["id"],
+            self.exercise_1.id,
+        )
+        self.assertEqual(
+            recommendation["topic"]["id"],
+            self.topic.id,
+        )
+        self.assertIsNone(recommendation["created_at"])
+
+    def test_low_result_recommends_repeating_same_exercise(self):
+        self.create_result(self.exercise_1, 40)
+        self.authenticate()
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recommendation = response.data["recommendations"][0]
+        self.assertEqual(recommendation["kind"], "review_exercise")
+        self.assertEqual(recommendation["priority"], "high")
+        self.assertEqual(
+            recommendation["exercise"]["id"],
+            self.exercise_1.id,
+        )
+
+    def test_medium_result_recommends_another_exercise_on_same_topic(self):
+        self.create_result(self.exercise_1, 65)
+        self.authenticate()
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recommendation = response.data["recommendations"][0]
+        self.assertEqual(recommendation["kind"], "practice_topic")
+        self.assertEqual(recommendation["priority"], "normal")
+        self.assertEqual(
+            recommendation["exercise"]["id"],
+            self.exercise_2.id,
+        )
+        self.assertEqual(
+            recommendation["topic"]["id"],
+            self.topic.id,
+        )
+
+    def test_high_result_recommends_next_unattempted_exercise(self):
+        self.create_result(self.exercise_1, 100)
+        self.authenticate()
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recommendation = response.data["recommendations"][0]
+        self.assertEqual(recommendation["kind"], "continue_learning")
+        self.assertEqual(recommendation["priority"], "low")
+        self.assertEqual(
+            recommendation["exercise"]["id"],
+            self.exercise_2.id,
+        )
+
+    def test_invalid_limit_returns_controlled_error(self):
+        self.authenticate()
+
+        response = self.client.get(self.endpoint, {"limit": "abc"})
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(response.data["error"]["code"], "INVALID_LIMIT")
+
+    def test_zero_limit_returns_controlled_error(self):
+        self.authenticate()
+
+        response = self.client.get(self.endpoint, {"limit": 0})
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(response.data["error"]["code"], "INVALID_LIMIT")
+
+    def test_limit_is_capped_at_ten(self):
+        exercises = [self.exercise_1, self.exercise_2]
+        for order in range(3, 12):
+            exercise = Exercise.objects.create(
+                title=f"Extra exercise {order}",
+                exercise_type="vocabulary_drill",
+                language="german",
+                level="A1",
+                is_active=True,
+                order=order,
+            )
+            exercise.topics.add(self.topic)
+            exercises.append(exercise)
+
+        for exercise in exercises:
+            self.create_result(exercise, 20)
+
+        self.authenticate()
+        response = self.client.get(self.endpoint, {"limit": 20})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["recommendations"]), 10)
+
+    def test_missing_student_profile_returns_controlled_error(self):
+        user = User.objects.create_user(
+            username="no-student-profile",
+            password="testpassword123",
+        )
+        login_response = self.client.post(
+            "/api/auth/login/",
+            {
+                "username": user.username,
+                "password": "testpassword123",
+            },
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {login_response.data['access']}"
+        )
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            response.data["error"]["code"],
+            "STUDENT_PROFILE_NOT_FOUND",
+        )
+
+    def test_supplied_student_id_does_not_change_recommendation_owner(self):
+        other_user = User.objects.create_user(
+            username="other-recommendation-student",
+            password="testpassword123",
+        )
+        other_student = Student.objects.create(
+            user=other_user,
+            first_name="Other",
+            last_name="Student",
+            email="other-recommendation-student@example.com",
+            level="A2",
+        )
+        ExerciseResult.objects.create(
+            student=other_student,
+            exercise=self.exercise_2,
+            score=10,
+            max_score=100,
+            percentage=10,
+            details={},
+        )
+        self.authenticate()
+
+        response = self.client.get(
+            self.endpoint,
+            {"student_id": other_student.id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recommendation = response.data["recommendations"][0]
+        self.assertEqual(recommendation["kind"], "start_learning")
+        self.assertEqual(
+            recommendation["exercise"]["id"],
+            self.exercise_1.id,
+        )
+
+    def test_legacy_topics_endpoint_remains_available(self):
+        self.authenticate()
+
+        response = self.client.get(
+            "/api/recommendations/student/topics/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("recommendations", response.data)
+        self.assertEqual(
+            response.data["recommendations"][0]["name"],
+            self.topic.name,
+        )

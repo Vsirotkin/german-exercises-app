@@ -12,6 +12,7 @@ from .views import (
     StudentHistoryView,
     StudentProgressView,
     StudentRecommendationsView,
+    RecommendationsView,
     ExerciseImportValidateView,
 )
 
@@ -64,6 +65,11 @@ urlpatterns = [
     # --------------------------------------------------------
     # Recommendations
     # --------------------------------------------------------
+    path(
+        "recommendations/",
+        RecommendationsView.as_view(),
+        name="recommendations",
+    ),
     path(
         "recommendations/student/topics/",
         StudentRecommendationsView.as_view(),
