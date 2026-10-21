@@ -7,6 +7,7 @@ from exercises.models import (
     Exercise,
     ExerciseResult,
     Student,
+    TeacherRecommendation,
     Topic,
     VocabularyItem,
 )
@@ -982,6 +983,123 @@ class AutomaticRecommendationsAPITest(BaseAPITestCase):
         self.assertEqual(
             recommendation["exercise"]["id"],
             self.exercise_1.id,
+        )
+
+    def test_manual_recommendation_matches_api_contract(self):
+        manual = TeacherRecommendation.objects.create(
+            student=self.student,
+            title="Repeat reflexive pronouns",
+            message="Practise the topic again.",
+            reason="Your last result was below the target.",
+            priority="normal",
+            topic=self.topic,
+            exercise=self.exercise_1,
+        )
+        self.authenticate()
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recommendation = next(
+            item
+            for item in response.data["recommendations"]
+            if item["id"] == f"admin:{manual.id}"
+        )
+
+        self.assertEqual(recommendation["source"], "admin")
+        self.assertEqual(recommendation["kind"], "teacher_advice")
+        self.assertEqual(recommendation["title"], manual.title)
+        self.assertEqual(recommendation["message"], manual.message)
+        self.assertEqual(recommendation["reason"], manual.reason)
+        self.assertEqual(recommendation["priority"], "normal")
+        self.assertEqual(
+            recommendation["topic"],
+            {"id": self.topic.id, "name": self.topic.name},
+        )
+        self.assertEqual(
+            recommendation["exercise"],
+            {
+                "id": self.exercise_1.id,
+                "title": self.exercise_1.title,
+                "exercise_type": self.exercise_1.exercise_type,
+                "level": self.exercise_1.level,
+            },
+        )
+        self.assertIsNotNone(recommendation["created_at"])
+
+    def test_manual_recommendations_precede_automatic_ones(self):
+        TeacherRecommendation.objects.create(
+            student=self.student,
+            title="Teacher advice",
+            message="Review this topic.",
+            priority="low",
+        )
+        self.authenticate()
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recommendations = response.data["recommendations"]
+
+        self.assertEqual(
+            [item["source"] for item in recommendations],
+            ["admin", "system"],
+        )
+        self.assertEqual(
+            recommendations[0]["kind"],
+            "teacher_advice",
+        )
+        self.assertEqual(
+            recommendations[1]["kind"],
+            "start_learning",
+        )
+
+    def test_inactive_manual_recommendations_are_excluded(self):
+        TeacherRecommendation.objects.create(
+            student=self.student,
+            title="Inactive advice",
+            message="This recommendation should not appear.",
+            is_active=False,
+        )
+        self.authenticate()
+
+        response = self.client.get(self.endpoint)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recommendations = response.data["recommendations"]
+
+        self.assertTrue(recommendations)
+        self.assertTrue(
+            all(item["source"] == "system" for item in recommendations)
+        )
+        self.assertNotIn(
+            "Inactive advice",
+            [item["title"] for item in recommendations],
+        )
+
+    def test_limit_applies_to_combined_recommendation_feed(self):
+        TeacherRecommendation.objects.create(
+            student=self.student,
+            title="Teacher advice one",
+            message="First recommendation.",
+            priority="normal",
+        )
+        TeacherRecommendation.objects.create(
+            student=self.student,
+            title="Teacher advice two",
+            message="Second recommendation.",
+            priority="high",
+        )
+        self.authenticate()
+
+        response = self.client.get(self.endpoint, {"limit": 2})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        recommendations = response.data["recommendations"]
+
+        self.assertEqual(len(recommendations), 2)
+        self.assertTrue(
+            all(item["source"] == "admin" for item in recommendations)
         )
 
     def test_legacy_topics_endpoint_remains_available(self):

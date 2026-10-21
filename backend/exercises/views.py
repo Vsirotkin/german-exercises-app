@@ -36,8 +36,8 @@ from .services.evaluator import (
 from .services.recommendations import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
-    build_automatic_recommendations,
 )
+from .services.recommendation_feed import build_recommendation_feed
 
 # ============================================================
 # 1. Получение полного упражнения
@@ -282,7 +282,7 @@ class RecommendationsView(APIView):
         return Response(
             {
                 "generated_at": timezone.now(),
-                "recommendations": build_automatic_recommendations(
+                "recommendations": build_recommendation_feed(
                     student,
                     limit=limit,
                 ),
