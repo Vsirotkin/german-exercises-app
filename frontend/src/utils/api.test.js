@@ -144,4 +144,17 @@ describe('API client', () => {
   it('exposes the login API method', () => {
     expect(api.login).toBeTypeOf('function')
   })
+
+  it('requests the personalized recommendation feed', async () => {
+    mocks.client.get.mockResolvedValue({
+      data: { recommendations: [] },
+    })
+
+    const result = await api.getRecommendationFeed()
+
+    expect(mocks.client.get).toHaveBeenCalledWith('/recommendations/', {
+      params: { limit: 5 },
+    })
+    expect(result).toEqual({ recommendations: [] })
+  })
 })

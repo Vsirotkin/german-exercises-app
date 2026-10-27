@@ -170,6 +170,13 @@ export const api = {
     return response.data
   },
 
+  async getRecommendationFeed(limit = 5) {
+    const response = await apiClient.get('/recommendations/', {
+      params: { limit },
+    })
+    return response.data
+  },
+
   async checkExerciseAnswer(data) {
     const response = await apiClient.post('/results/check-answer/', data)
     return response.data

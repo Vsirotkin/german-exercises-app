@@ -268,6 +268,96 @@
         </div>
       </section>
 
+      <!-- Personal recommendations -->
+      <section class="overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm">
+        <div class="border-b border-indigo-100 bg-indigo-50/60 px-5 py-5 sm:px-6">
+          <h2 class="text-lg font-semibold text-slate-900">
+            Empfehlungen für dich
+          </h2>
+          <p class="mt-1 text-sm text-slate-600">
+            Deine nächsten Lernschritte, basierend auf deinem Lernstand.
+          </p>
+        </div>
+
+        <div
+          v-if="recommendationsError"
+          role="status"
+          class="m-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        >
+          Empfehlungen sind momentan nicht verfügbar.
+          {{ recommendationsError }}
+          <button
+            type="button"
+            class="ml-2 font-semibold underline"
+            @click="loadRecommendations"
+          >
+            Erneut versuchen
+          </button>
+        </div>
+
+        <div
+          v-else-if="recommendationsLoading"
+          class="px-6 py-8 text-sm text-slate-500"
+          role="status"
+        >
+          Empfehlungen werden geladen...
+        </div>
+
+        <div
+          v-else-if="recommendations.length === 0"
+          class="px-6 py-8 text-sm text-slate-600"
+        >
+          Momentan gibt es keine Empfehlungen. Entdecke weitere Übungen im Katalog.
+          <RouterLink
+            to="/exercises"
+            class="ml-1 font-semibold text-blue-700 hover:text-blue-800"
+          >
+            Zum Katalog →
+          </RouterLink>
+        </div>
+
+        <div v-else class="divide-y divide-slate-100">
+          <article
+            v-for="item in recommendations"
+            :key="item.id"
+            class="px-5 py-4 sm:px-6"
+          >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="font-semibold text-slate-900">
+                    {{ item.title || 'Lernempfehlung' }}
+                  </h3>
+                  <span
+                    v-if="item.priority"
+                    class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+                  >
+                    {{ item.priority === 'high' ? 'Hohe Priorität' : item.priority === 'normal' ? 'Mittlere Priorität' : 'Empfehlung' }}
+                  </span>
+                </div>
+                <p v-if="item.message" class="mt-2 text-sm leading-6 text-slate-700">
+                  {{ item.message }}
+                </p>
+                <p v-if="item.reason" class="mt-1 text-sm leading-6 text-slate-500">
+                  {{ item.reason }}
+                </p>
+                <p v-if="item.topic?.name" class="mt-2 text-xs font-medium text-indigo-700">
+                  Thema: {{ item.topic.name }}
+                </p>
+              </div>
+
+              <RouterLink
+                v-if="item.exercise?.id"
+                :to="`/exercises/${item.exercise.id}`"
+                class="inline-flex w-fit shrink-0 items-center gap-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white no-underline transition hover:bg-blue-700"
+              >
+                Übung öffnen →
+              </RouterLink>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <!-- Next action -->
       <section class="flex flex-col gap-5 rounded-2xl border border-blue-100 bg-blue-50 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
         <div>
@@ -297,6 +387,9 @@ const user = ref(null)
 const progress = ref(null)
 const history = ref([])
 const exerciseCount = ref(null)
+const recommendations = ref([])
+const recommendationsLoading = ref(false)
+const recommendationsError = ref('')
 
 const isLoading = ref(true)
 const errorMessage = ref('')
@@ -316,6 +409,25 @@ function normalizeList(data) {
   if (Array.isArray(data)) return data
   if (Array.isArray(data?.results)) return data.results
   return []
+}
+
+async function loadRecommendations() {
+  recommendationsLoading.value = true
+  recommendationsError.value = ''
+
+  try {
+    const response = await api.getRecommendationFeed()
+    recommendations.value = normalizeList(response?.recommendations)
+  } catch (error) {
+    console.error('Failed to load recommendations:', error)
+    recommendations.value = []
+    recommendationsError.value =
+      error?.response?.data?.error?.message ||
+      error?.response?.data?.detail ||
+      'Bitte versuche es später erneut.'
+  } finally {
+    recommendationsLoading.value = false
+  }
 }
 
 function formatNumber(value) {
@@ -392,13 +504,21 @@ async function loadDashboard() {
       return
     }
 
+    recommendationsLoading.value = true
+
     const results = await Promise.allSettled([
       api.getStudentProgress(currentUser.student_id),
       api.getStudentHistory(currentUser.student_id),
       api.getExercisesList(),
+      api.getRecommendationFeed(),
     ])
 
-    const [progressResult, historyResult, exercisesResult] = results
+    const [
+      progressResult,
+      historyResult,
+      exercisesResult,
+      recommendationsResult,
+    ] = results
 
     if (progressResult.status === 'fulfilled') {
       progress.value = progressResult.value
@@ -426,7 +546,26 @@ async function loadDashboard() {
         exercisesResult.reason?.response?.data?.detail ||
         'Bitte versuche es später erneut.'
     }
+
+    if (recommendationsResult.status === 'fulfilled') {
+      recommendations.value = normalizeList(
+        recommendationsResult.value?.recommendations,
+      )
+      recommendationsError.value = ''
+    } else {
+      console.error(
+        'Failed to load recommendations:',
+        recommendationsResult.reason,
+      )
+      recommendations.value = []
+      recommendationsError.value =
+        recommendationsResult.reason?.response?.data?.error?.message ||
+        recommendationsResult.reason?.response?.data?.detail ||
+        'Bitte versuche es später erneut.'
+    }
+    recommendationsLoading.value = false
   } catch (error) {
+    recommendationsLoading.value = false
     console.error('Failed to load current user:', error)
 
     errorMessage.value =
