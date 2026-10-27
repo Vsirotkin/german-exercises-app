@@ -195,6 +195,25 @@ class AutomaticRecommendationServiceTests(TestCase):
 
         self.assertEqual(recommendations, [])
 
+
+    def test_completed_practice_recommendation_is_not_repeated(self):
+        self.exercise_3.delete()
+
+        self.add_result(self.exercise_1, 60)
+        first_feed = build_automatic_recommendations(self.student)
+
+        self.assertEqual(len(first_feed), 1)
+        self.assertEqual(
+            first_feed[0]["exercise"]["id"],
+            self.exercise_2.id,
+        )
+
+        self.add_result(self.exercise_2, 100)
+        updated_feed = build_automatic_recommendations(self.student)
+
+        self.assertEqual(updated_feed, [])
+
+
     def test_result_at_least_80_recommends_next_unattempted_exercise(self):
         self.add_result(self.exercise_1, 100)
 

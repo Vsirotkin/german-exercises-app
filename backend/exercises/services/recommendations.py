@@ -246,7 +246,8 @@ def build_automatic_recommendations(student, limit=DEFAULT_LIMIT):
             (
                 (candidate, matching_topics)
                 for candidate, matching_topics in candidates
-                if candidate.id not in selected_exercise_ids
+                if candidate.id not in attempted_exercise_ids
+                and candidate.id not in selected_exercise_ids
             ),
             None,
         )
