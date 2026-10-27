@@ -232,7 +232,7 @@ function getPrompt(card) {
     return card.question
   }
 
-  return card.word || card.question || ''
+  return card.prompt || card.word || card.question || ''
 }
 
 async function loadExercise() {
@@ -457,7 +457,7 @@ onMounted(loadExercise)
               Deine Antwort:
               <strong>
                 {{
-                  exerciseType === 'multiple_choice'
+                  ['multiple_choice', 'vocabulary_drill'].includes(exerciseType)
                     ? getOptionText(card, answers[card.id])
                     : answers[card.id]
                 }}
