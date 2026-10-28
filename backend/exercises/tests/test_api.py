@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status
@@ -7,6 +9,7 @@ from exercises.models import (
     Exercise,
     ExerciseResult,
     Student,
+    StudentTopicProgress,
     TeacherRecommendation,
     Topic,
     VocabularyItem,
@@ -1115,3 +1118,69 @@ class AutomaticRecommendationsAPITest(BaseAPITestCase):
             response.data["recommendations"][0]["name"],
             self.topic.name,
         )
+
+
+class StudentTopicProgressAPITest(BaseAPITestCase):
+    def post_result_with_percentage(self, exercise, percentage):
+        self.authenticate()
+        evaluation = {
+            "score": percentage / 100,
+            "max_score": 1,
+            "percentage": float(percentage),
+            "results": [],
+        }
+        with patch(
+            "exercises.views._evaluate_answers",
+            return_value=evaluation,
+        ):
+            return self.client.post(
+                "/api/results/",
+                {"exercise_id": exercise.id, "answers": []},
+                format="json",
+            )
+
+    def test_repeated_attempt_counts_exercise_once_and_keeps_best_score(self):
+        first = self.post_result_with_percentage(self.exercise_1, 40)
+        second = self.post_result_with_percentage(self.exercise_1, 80)
+
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+
+        progress = StudentTopicProgress.objects.get(
+            student=self.student, topic=self.topic
+        )
+        self.assertEqual(progress.exercises_completed, 1)
+        self.assertAlmostEqual(progress.mastery_level, 0.8)
+
+    def test_mastery_averages_best_scores_for_unique_exercises(self):
+        self.post_result_with_percentage(self.exercise_1, 40)
+        self.post_result_with_percentage(self.exercise_1, 80)
+        response = self.post_result_with_percentage(self.exercise_2, 0)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        progress = StudentTopicProgress.objects.get(
+            student=self.student, topic=self.topic
+        )
+        self.assertEqual(progress.exercises_completed, 2)
+        self.assertAlmostEqual(progress.mastery_level, 0.4)
+
+    def test_result_updates_progress_for_every_exercise_topic(self):
+        second_topic = Topic.objects.create(
+            name="Arbeit",
+            description="Work",
+        )
+        self.exercise_1.topics.add(second_topic)
+
+        response = self.post_result_with_percentage(self.exercise_1, 80)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            StudentTopicProgress.objects.filter(student=self.student).count(),
+            2,
+        )
+        for topic in (self.topic, second_topic):
+            progress = StudentTopicProgress.objects.get(
+                student=self.student, topic=topic
+            )
+            self.assertEqual(progress.exercises_completed, 1)
+            self.assertAlmostEqual(progress.mastery_level, 0.8)

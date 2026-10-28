@@ -38,6 +38,7 @@ from .services.recommendations import (
     MAX_LIMIT,
 )
 from .services.recommendation_feed import build_recommendation_feed
+from .services.topic_progress import update_student_topic_progress
 
 # ============================================================
 # 1. Получение полного упражнения
@@ -745,6 +746,8 @@ class ExerciseResultView(APIView):
                 "results": evaluation.get("results", []),
             },
         )
+
+        update_student_topic_progress(student, exercise)
 
         return Response(
             {
