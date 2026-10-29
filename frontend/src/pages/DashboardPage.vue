@@ -37,8 +37,48 @@
     </div>
 
     <template v-else>
+      <!-- Dashboard tabs -->
+      <nav
+        aria-label="Dashboard-Bereiche"
+        role="tablist"
+        class="flex w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1"
+      >
+        <button
+          v-for="tab in tabs"
+          :id="`tab-${tab.id}`"
+          :key="tab.id"
+          :ref="(el) => setTabRef(el, tab.id)"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === tab.id"
+          :aria-controls="`panel-${tab.id}`"
+          :tabindex="activeTab === tab.id ? 0 : -1"
+          :class="[
+            'shrink-0 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors duration-200',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2',
+            activeTab === tab.id
+              ? 'border-blue-100 bg-white text-blue-700 shadow-sm'
+              : 'border-transparent bg-transparent text-slate-600 hover:bg-white/70 hover:text-slate-900',
+          ]"
+          @click="selectTab(tab.id)"
+          @keydown="onTabKeydown($event, tab.id)"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
+
+      <!-- Overview and progress tab panel -->
+      <div
+        v-if="activeTab === 'overview' || activeTab === 'progress'"
+        :id="activeTab === 'overview' ? 'panel-overview' : 'panel-progress'"
+        role="tabpanel"
+        :aria-labelledby="activeTab === 'overview' ? 'tab-overview' : 'tab-progress'"
+        tabindex="0"
+        class="space-y-6"
+      >
       <!-- Greeting -->
       <header
+        v-if="activeTab === 'overview'"
         class="relative overflow-hidden rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-6 sm:p-8"
       >
         <div
@@ -183,8 +223,37 @@
         </div>
       </section>
 
-      <!-- Recent history -->
-      <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <!-- Next action on overview -->
+      <section
+        v-if="activeTab === 'overview'"
+        class="flex flex-col gap-5 rounded-2xl border border-blue-100 bg-blue-50 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7"
+      >
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">
+            Bereit für die nächste Übung?
+          </h2>
+          <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Öffne den Katalog und wähle eine der für dich verfügbaren Übungen.
+          </p>
+        </div>
+        <RouterLink
+          to="/exercises"
+          class="inline-flex w-fit shrink-0 items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white no-underline transition hover:bg-blue-700"
+        >
+          Übungen entdecken
+        </RouterLink>
+      </section>
+      </div>
+
+      <!-- Full exercise history -->
+      <section
+        v-if="activeTab === 'history'"
+        id="panel-history"
+        role="tabpanel"
+        aria-labelledby="tab-history"
+        tabindex="0"
+        class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+      >
         <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             <h2 class="text-lg font-semibold text-slate-900">
@@ -234,7 +303,7 @@
 
         <div v-else class="divide-y divide-slate-100">
           <article
-            v-for="item in recentHistory"
+            v-for="item in history"
             :key="item.id"
             class="flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-6"
           >
@@ -269,7 +338,14 @@
       </section>
 
       <!-- Personal recommendations -->
-      <section class="overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm">
+      <section
+        v-if="activeTab === 'recommendations'"
+        id="panel-recommendations"
+        role="tabpanel"
+        aria-labelledby="tab-recommendations"
+        tabindex="0"
+        class="overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm"
+      >
         <div class="border-b border-indigo-100 bg-indigo-50/60 px-5 py-5 sm:px-6">
           <h2 class="text-lg font-semibold text-slate-900">
             Empfehlungen für dich
@@ -289,7 +365,7 @@
           <button
             type="button"
             class="ml-2 font-semibold underline"
-            @click="loadRecommendations"
+            @click="loadDashboard"
           >
             Erneut versuchen
           </button>
@@ -358,21 +434,38 @@
         </div>
       </section>
 
-      <!-- Next action -->
-      <section class="flex flex-col gap-5 rounded-2xl border border-blue-100 bg-blue-50 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
-        <div>
-          <h2 class="text-lg font-semibold text-slate-900">
-            Bereit für die nächste Übung?
-          </h2>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Öffne den Katalog und wähle eine der für dich verfügbaren Übungen.
-          </p>
+      <!-- Exercise catalogue entry point -->
+      <section
+        v-if="activeTab === 'exercises'"
+        id="panel-exercises"
+        role="tabpanel"
+        aria-labelledby="tab-exercises"
+        tabindex="0"
+        class="rounded-2xl border border-amber-100 bg-white p-6 shadow-sm sm:p-8"
+      >
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-2xl">
+          📚
         </div>
+        <h2 class="mt-4 text-xl font-semibold text-slate-900">
+          Verfügbare Übungen
+        </h2>
+        <p class="mt-2 text-sm leading-6 text-slate-600">
+          Entdecke Übungen und wähle die passende Aufgabe für dein Deutschtraining.
+        </p>
+
+        <p v-if="exerciseCount !== null" class="mt-3 text-sm font-medium text-slate-700">
+          {{ exerciseCount }} Übungen verfügbar
+        </p>
+
+        <p v-if="exerciseError" role="status" class="mt-3 text-sm text-amber-700">
+          Die Anzahl der Übungen konnte nicht geladen werden.
+        </p>
+
         <RouterLink
           to="/exercises"
-          class="inline-flex w-fit shrink-0 items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white no-underline transition hover:bg-blue-700"
+          class="mt-5 inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white no-underline transition hover:bg-blue-700"
         >
-          Übungen entdecken
+          Alle Übungen ansehen →
         </RouterLink>
       </section>
     </template>
@@ -382,6 +475,62 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from '@/utils/api'
+
+const tabs = [
+  { id: 'overview', label: 'Übersicht' },
+  { id: 'recommendations', label: 'Empfehlungen' },
+  { id: 'history', label: 'Verlauf' },
+  { id: 'progress', label: 'Fortschritt' },
+  { id: 'exercises', label: 'Übungen' },
+]
+
+const activeTab = ref('overview')
+
+const tabElements = new Map()
+
+function setTabRef(element, tabId) {
+  if (element) {
+    tabElements.set(tabId, element)
+  } else {
+    tabElements.delete(tabId)
+  }
+}
+
+function selectTab(tabId, { focus = false } = {}) {
+  activeTab.value = tabId
+
+  if (focus) {
+    tabElements.get(tabId)?.focus()
+  }
+}
+
+function onTabKeydown(event, currentTabId) {
+  const currentIndex = tabs.findIndex((tab) => tab.id === currentTabId)
+
+  if (currentIndex < 0) return
+
+  let nextIndex
+
+  switch (event.key) {
+    case 'ArrowRight':
+      nextIndex = (currentIndex + 1) % tabs.length
+      break
+    case 'ArrowLeft':
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
+      break
+    case 'Home':
+      nextIndex = 0
+      break
+    case 'End':
+      nextIndex = tabs.length - 1
+      break
+    default:
+      return
+  }
+
+  event.preventDefault()
+  selectTab(tabs[nextIndex].id, { focus: true })
+}
 
 const user = ref(null)
 const progress = ref(null)
@@ -403,31 +552,10 @@ const userDisplayName = computed(() => (
   'Lernender'
 ))
 
-const recentHistory = computed(() => history.value.slice(0, 5))
-
 function normalizeList(data) {
   if (Array.isArray(data)) return data
   if (Array.isArray(data?.results)) return data.results
   return []
-}
-
-async function loadRecommendations() {
-  recommendationsLoading.value = true
-  recommendationsError.value = ''
-
-  try {
-    const response = await api.getRecommendationFeed()
-    recommendations.value = normalizeList(response?.recommendations)
-  } catch (error) {
-    console.error('Failed to load recommendations:', error)
-    recommendations.value = []
-    recommendationsError.value =
-      error?.response?.data?.error?.message ||
-      error?.response?.data?.detail ||
-      'Bitte versuche es später erneut.'
-  } finally {
-    recommendationsLoading.value = false
-  }
 }
 
 function formatNumber(value) {
@@ -490,6 +618,8 @@ async function loadDashboard() {
   progressError.value = ''
   historyError.value = ''
   exerciseError.value = ''
+  recommendationsError.value = ''
+  recommendationsLoading.value = false
   progress.value = null
   history.value = []
   exerciseCount.value = null
