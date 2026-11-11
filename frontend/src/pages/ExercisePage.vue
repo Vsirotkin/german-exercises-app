@@ -53,6 +53,42 @@ const resultByItemId = computed(() => {
   return map
 })
 
+// НОВАЯ ФУНКЦИЯ: поиск результата по item_id и unit_id
+function getResultFor(itemId, unitId = null) {
+  if (!result.value?.results) return null
+  return result.value.results.find(r =>
+    String(r.item_id) === String(itemId) &&
+    (unitId === null || r.unit_id === null || String(r.unit_id) === String(unitId))
+  )
+}
+
+// НОВАЯ ФУНКЦИЯ: определяет, все ли части карточки правильные
+function isCardFullyCorrect(card) {
+  if (!result.value?.results) return null
+
+  if (exerciseType.value === 'dropdown') {
+    const selectableParts = (card.parts || []).filter(p => p.part_type === 'select')
+    if (selectableParts.length === 0) return null
+    return selectableParts.every(part => {
+      const result = getResultFor(card.id, part.id)
+      return result?.is_correct === true
+    })
+  }
+
+  if (exerciseType.value === 'gap_fill') {
+    const gaps = card.gaps || []
+    if (gaps.length === 0) return null
+    return gaps.every(gap => {
+      const result = getResultFor(card.id, gap.id)
+      return result?.is_correct === true
+    })
+  }
+
+  // Для типов без unit_id используем старую логику
+  const resultItem = getResultFor(card.id)
+  return resultItem?.is_correct === true
+}
+
 function getSelectedOption(itemId, partId) {
   const selectedId = answers[itemId]?.[String(partId)]
 
@@ -392,9 +428,9 @@ onMounted(loadExercise)
           :key="card.id"
           class="mb-4 rounded-xl border p-4 shadow-sm transition-colors duration-200 motion-reduce:transition-none"
           :class="
-            resultByItemId[String(card.id)]?.is_correct === true
+            isCardFullyCorrect(card) === true
               ? 'border-emerald-300 bg-emerald-50'
-              : resultByItemId[String(card.id)]?.is_correct === false
+              : isCardFullyCorrect(card) === false
                 ? 'border-red-300 bg-red-50'
                 : 'border-slate-200 bg-white'
           "
@@ -408,7 +444,13 @@ onMounted(loadExercise)
                 <span v-if="segment.type === 'text'">
                   {{ segment.value }}
                 </span>
-                <strong v-else class="mx-1 underline">
+                <strong v-else
+                  class="mx-1 underline"
+                  :class="{
+                    'text-emerald-700': getResultFor(card.id, segment.gap.id)?.is_correct === true,
+                    'text-red-700': getResultFor(card.id, segment.gap.id)?.is_correct === false
+                  }"
+                >
                   {{ answers[card.id]?.[String(segment.gap.id)] || '—' }}
                 </strong>
               </template>
@@ -422,8 +464,8 @@ onMounted(loadExercise)
 
             <div
               v-if="
-                resultByItemId[String(card.id)]?.is_correct === false
-                && resultByItemId[String(card.id)]?.correct_answer
+                getResultFor(card.id)?.is_correct === false
+                && getResultFor(card.id)?.correct_answer
               "
               class="mt-3 rounded-lg border border-emerald-200 bg-white/80 p-3"
             >
@@ -431,7 +473,7 @@ onMounted(loadExercise)
                 Richtige Lösung
               </p>
               <p class="mt-1 font-semibold text-emerald-800">
-                {{ resultByItemId[String(card.id)].correct_answer }}
+                {{ getResultFor(card.id).correct_answer }}
               </p>
             </div>
           </template>
@@ -443,7 +485,12 @@ onMounted(loadExercise)
                   {{ part.text }}
                 </span>
                 <span v-else>
-                  <strong>
+                  <strong
+                    :class="{
+                      'text-emerald-700': getResultFor(card.id, part.id)?.is_correct === true,
+                      'text-red-700': getResultFor(card.id, part.id)?.is_correct === false
+                    }"
+                  >
                     {{ getSelectedOption(card.id, part.id)?.text || '—' }}
                   </strong>
                 </span>
@@ -466,16 +513,16 @@ onMounted(loadExercise)
           </template>
 
           <p
-            v-if="resultByItemId[String(card.id)]"
+            v-if="isCardFullyCorrect(card) !== null"
             class="mt-4 border-t border-current/10 pt-3 font-bold"
             :class="
-              resultByItemId[String(card.id)].is_correct
+              isCardFullyCorrect(card)
                 ? 'text-emerald-700'
                 : 'text-red-700'
             "
           >
             {{
-              resultByItemId[String(card.id)].is_correct
+              isCardFullyCorrect(card)
                 ? '✓ Richtig'
                 : '✗ Leider falsch'
             }}
